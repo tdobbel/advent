@@ -1,5 +1,6 @@
 use std::fs::File;
 use std::io::{BufRead, BufReader};
+use std::env;
 
 fn issafe(numbers: &Vec<i32>) -> bool {
     let increasing = numbers[1] > numbers[0];
@@ -29,7 +30,9 @@ fn issafe_dampened(numbers: &Vec<i32>) -> bool {
 }
 
 fn main() {
-    let file = File::open("input").unwrap();
+    let args: Vec<String> = env::args().collect();
+    assert_eq!(args.len(), 2);
+    let file = File::open(args[1].clone()).unwrap();
     let reader = BufReader::new(file);
     let mut total1 = 0;
     let mut total2 = 0;
