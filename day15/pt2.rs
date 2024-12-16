@@ -1,6 +1,5 @@
 use std::fs::File;
 use std::io::{BufRead, BufReader};
-use std::collections::HashSet;
 use std::env;
 
 enum Move {
@@ -49,6 +48,9 @@ fn get_all_obstacles(pos: &(i32, i32), shift: &(i32, i32), objects: &Vec<Object>
         Some(i) => i,
         None => return
     };
+    if indices.contains(&index) {
+        return
+    }
     indices.push(index);
     match &objects[index] {
         Object::Wall{x:_, y:_} => return,
@@ -102,10 +104,7 @@ fn move_robot(robot: &mut Robot, dx: &Move, objects: &mut Vec<Object>) {
     };
     let mut indices = Vec::<usize>::new();
     get_all_obstacles(&(robot.x, robot.y), &(shiftx, shifty), &objects, &mut indices);
-    let uindex = indices.into_iter()
-        .collect::<HashSet<_>>()
-        .into_iter().collect::<Vec<usize>>();
-    for i in uindex.iter() {
+    for i in indices.iter() {
         match &objects[*i] {
             Object::Wall{x:_, y:_} => return,
             Object::Box2{x1:_, x2:_, y:_} => continue
@@ -113,7 +112,7 @@ fn move_robot(robot: &mut Robot, dx: &Move, objects: &mut Vec<Object>) {
     }
     robot.x += shiftx;
     robot.y += shifty;
-    for i in uindex.iter() {
+    for i in indices.iter() {
         let o = &mut objects[*i];
         match o {
             Object::Box2{x1:x1_, x2:x2_, y:y_} => {
