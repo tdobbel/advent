@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+
+issafe() {
+    local levels=("$@")
+    local num1=${levels[0]}
+    local num2=${levels[1]}
+    local increasing
+    local diff
+
+    if (( num2 > num1)); then
+        increasing=true
+    else
+        increasing=false
+    fi
+    local i
+    for ((i=1; i<${#levels[@]}; i++)); do
+        num1=${levels[i-1]}
+        num2=${levels[i]}
+        if $increasing ; then
+            diff=$((num2 - num1))
+        else
+            diff=$((num1 - num2))
+        fi
+        if (( diff < 1 || diff > 3 )); then
+            return 1
+        fi
+    done
+    return 0
+}
+
+count1=0
+count2=0
+while read -ra line; do
+    if issafe "${line[@]}"; then
+        ((count1++))
+        ((count2++))
+        continue
+    fi
+    for ((i=0; i<${#line[@]}; i++)); do
+        newarray=(${line[@]:0:i} ${line[@]:i+1})
+        if issafe "${newarray[@]}"; then
+            ((count2++))
+            break
+        fi
+    done
+done
+echo $count1 safe lines in part 1
+echo $count2 safe lines in part 2
