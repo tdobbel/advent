@@ -1,10 +1,6 @@
 use std::fs::File;
 use std::io::{BufRead, BufReader};
-use std::cmp::min;
 use std::env;
-
-const TOL_N: usize = 20;
-const TOL_DIST: i32 = 40;
 
 #[derive(Debug,Clone)]
 enum Direction {
@@ -94,7 +90,7 @@ fn get_next_cells(mc: &MazeCell, walls: &Vec<(i32,i32)>) -> Vec<MazeCell> {
 
 fn solve_maze(
     candidates: &mut Vec<MazeCell>, closed: &mut Vec<(i32,i32)>, end: &(i32,i32),
-    walls: &Vec<(i32,i32)>, path: &mut Vec<(i32,i32)>
+    walls: &Vec<(i32,i32)>, path: &mut Vec<(i32,i32)>, target_score: Option<i32>
 ) -> i32 {
     let mut score = -1;
     while score < 0 {
@@ -105,6 +101,11 @@ fn solve_maze(
             if cell_score < best_score {
                 best_score = cell_score;
                 ibest = i;
+            }
+        }
+        if let Some(target_score) = target_score {
+            if best_score > target_score {
+                return -1;
             }
         }
         let best = &candidates[ibest];
@@ -118,84 +119,66 @@ fn solve_maze(
         }
         let new_cells = get_next_cells(best, walls);
         closed.push((best.x, best.y));
+        candidates.remove(ibest);
         for cell in new_cells {
+            if closed.contains(&(cell.x, cell.y)) {
+                continue;
+            }
             candidates.push(cell);
         }
-        let mut remove = Vec::<usize>::new();
-        for (i,mc) in candidates.iter().enumerate() {
-            if closed.contains(&(mc.x, mc.y)) {
-                remove.push(i);
-            }
-        }
-        for i in remove.iter().rev() {
-            candidates.remove(*i);
+        if candidates.len() == 0 {
+            return -1;
         }
     }
     score
 }
 
-fn extra_score(tile: &MazeCell, end: &(i32,i32)) -> i32 {
-    let mut score = 0;
-    let (dx, dy) = (tile.x-end.0, tile.y-end.1);
-    if dy > 0 {
-        match tile.direction {
-            Direction::Left => score += 1000,
-            Direction::Right => score += 1000,
-            Direction::Down => score += 2000,
-            Direction::Up => score += 0,
-        };
+fn get_sub_path(
+    ref_path: &Vec<(i32,i32)>, candidates: &mut Vec<MazeCell>, closed: &mut Vec<(i32,i32)>,
+    walls: &Vec<(i32,i32)>, n: usize
+) {
+    let start = ref_path[0];
+    let mut tile = MazeCell { x: start.0, y: start.1, direction: Direction::Right, score: 0, visited: Vec::<(i32,i32)>::new() };
+    for i in 1..n {
+        closed.push((tile.x, tile.y));
+        let next_tiles = get_next_cells(&tile, walls);
+        for next_tile in next_tiles {
+            if next_tile.x == ref_path[i].0 && next_tile.y == ref_path[i].1 {
+                tile = next_tile;
+                break;
+            }
+        }
     }
-    if dx > 0 {
-        match tile.direction {
-            Direction::Left => score += 2000,
-            Direction::Right => score += 0,
-            Direction::Down => score += 1000,
-            Direction::Up => score += 1000,
-        };
-    }
-    return score + dx + dy;
+    closed.push(ref_path[n]);
+    candidates.push(tile);
 }
 
 fn get_best_paths(
-    candidates: &mut Vec<MazeCell>, closed: &mut Vec<(i32,i32)>, best_score: &i32,
-    ref_path: &Vec<(i32,i32)>, end: &(i32,i32), walls: &Vec<(i32,i32)>
-) -> Vec<(i32,Vec<(i32,i32)>)> {
-    let mut paths = Vec::<(i32,Vec<(i32,i32)>)>::new();
-    let mut n = candidates.len();
-    while n > 0 {
-        let mut ibest: usize = 0;
-        let mut min_score = i32::MAX;
-        for (i,mc) in candidates.iter().enumerate() {
-            let cell_score = mc.score + distance(&(mc.x, mc.y), end);
-            if cell_score < min_score {
-                min_score = cell_score;
-                ibest = i;
-            }
-        }
-        let best = &candidates[ibest];
-        if best.x == end.0 && best.y == end.1 {
-            paths.push((best.score, best.visited.clone()));
-        }
-        let new_cells = get_next_cells(best, walls);
-        candidates.remove(ibest);
-        for cell in new_cells {
-            let pos = (cell.x, cell.y);
-            let mut ip = cell.visited.len();
-            if ip > ref_path.len() + TOL_N  {
-                closed.push(pos);
-                continue
-            }
-            ip = min(ip, ref_path.len()-1);
-            let dist = distance(&(cell.x, cell.y), &ref_path[ip]);
-            if cell.score + extra_score(&cell, end) > *best_score || dist > TOL_DIST {
-                closed.push(pos);
-                continue
-            }
-            candidates.push(cell);
-        }
-        n = candidates.len();
+    ref_path: &Vec<(i32,i32)>, target: i32, end: &(i32,i32), walls: &Vec<(i32,i32)>
+) -> usize {
+    let mut all_tiles = Vec::<(i32,i32)>::new();
+    for (x,y) in ref_path.iter() {
+        all_tiles.push((*x,*y));
     }
-    paths
+    for n in 1..ref_path.len()-2 {
+        print!("Trying with n = {}/{} ", n, ref_path.len()-2);
+        let mut candidates = Vec::<MazeCell>::new();
+        let mut closed = Vec::<(i32,i32)>::new();
+        get_sub_path(&ref_path, &mut candidates, &mut closed, walls, n);
+        let mut new_path = Vec::<(i32,i32)>::new();
+        let new_score = solve_maze(&mut candidates, &mut closed, end, walls, &mut new_path, Some(target));
+        if new_score < 0 {
+            println!("-> No solution found");
+            continue
+        }
+        println!("-> Found new path with score {}", new_score);
+        for (x,y) in new_path.iter() {
+            if !all_tiles.contains(&(*x,*y)) {
+                all_tiles.push((*x,*y));
+            }
+        }
+    }
+    return all_tiles.len();
 }
 
 fn main() {
@@ -232,24 +215,10 @@ fn main() {
     });
     closed = Vec::<(i32,i32)>::new();
     let mut ref_path = Vec::<(i32,i32)>::new();
-    let score = solve_maze(&mut candidates, &mut closed, &end, &walls, &mut ref_path);
+    let score = solve_maze(&mut candidates, &mut closed, &end, &walls, &mut ref_path, None);
     plot_path(&ref_path, &walls, &nx, &ny);
     println!("Best score: {}", score);
     // Find all best paths
-    candidates = Vec::<MazeCell>::new();
-    candidates.push(MazeCell {
-        x: start.0, y: start.1, direction: Direction::Right,
-        score: 0, visited: Vec::<(i32,i32)>::new()
-    });
-    closed = Vec::<(i32,i32)>::new();
-    let paths = get_best_paths(&mut candidates, &mut closed, &score, &ref_path, &end, &walls);
-    let mut best_cells = Vec::<(i32,i32)>::new();
-    for (_,path) in paths.iter() {
-        for (x,y) in path.iter() {
-            if !best_cells.contains(&(*x,*y)) {
-                best_cells.push((*x,*y));
-            }
-        }
-    }
-    println!("{} tiles are part of at least one of the best paths", best_cells.len()+1);
+    let n_tiles = get_best_paths(&ref_path, score, &end, &walls);
+    println!("{} tiles are part of at least one of the best paths", n_tiles);
 }
