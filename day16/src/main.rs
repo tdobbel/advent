@@ -74,34 +74,38 @@ fn get_next_cells(mc: &MazeCell, walls: &Vec<(i32,i32)>) -> Vec<MazeCell> {
 }
 
 fn solve_maze(candidates: &mut Vec<MazeCell>, closed: &mut Vec<(i32,i32)>, end: &(i32,i32), walls: &Vec<(i32,i32)>) -> i32 {
-    let mut ibest: usize = 0;
-    let mut best_score = i32::MAX;
-    for (i,mc) in candidates.iter().enumerate() {
-        let score = mc.score + distance_from_end(mc, end);
-        if score < best_score {
-            best_score = score;
-            ibest = i;
+    let mut score = -1;
+    while score < 0 {
+        let mut ibest: usize = 0;
+        let mut best_score = i32::MAX;
+        for (i,mc) in candidates.iter().enumerate() {
+            let cell_score = mc.score + distance_from_end(mc, end);
+            if cell_score < best_score {
+                best_score = cell_score;
+                ibest = i;
+            }
+        }
+        let best = &candidates[ibest];
+        if best.x == end.0 && best.y == end.1 {
+            score = best.score;
+            break;
+        }
+        let new_cells = get_next_cells(best, walls);
+        closed.push((best.x, best.y));
+        for cell in new_cells {
+            candidates.push(cell);
+        }
+        let mut remove = Vec::<usize>::new();
+        for (i,mc) in candidates.iter().enumerate() {
+            if closed.contains(&(mc.x, mc.y)) {
+                remove.push(i);
+            }
+        }
+        for i in remove.iter().rev() {
+            candidates.remove(*i);
         }
     }
-    let best = &candidates[ibest];
-    if best.x == end.0 && best.y == end.1 {
-        return best.score;
-    }
-    let new_cells = get_next_cells(best, walls);
-    closed.push((best.x, best.y));
-    for cell in new_cells {
-        candidates.push(cell);
-    }
-    let mut remove = Vec::<usize>::new();
-    for (i,mc) in candidates.iter().enumerate() {
-        if closed.contains(&(mc.x, mc.y)) {
-            remove.push(i);
-        }
-    }
-    for i in remove.iter().rev() {
-        candidates.remove(*i);
-    }
-    return solve_maze(candidates, closed, end, walls)
+    score
 }
 
 fn main() {
