@@ -4,13 +4,12 @@ use std::env;
 
 #[derive(Debug)]
 struct Register {
-    a: u32,
-    b: u32,
-    c: u32,
+    a: u64,
+    b: u64,
+    c: u64,
 }
 
-
-fn get_combo(literal: u32, register: &Register) -> u32 {
+fn get_combo(literal: u64, register: &Register) -> u64 {
     if literal < 4 {
         return literal;
     }
@@ -28,13 +27,14 @@ fn get_combo(literal: u32, register: &Register) -> u32 {
     }
 }
 
-fn execute_program(program: &Vec<char>, register: &mut Register, op_pointer: &mut usize, output: &mut Vec<u32>) {
+fn execute_program(program: &Vec<char>, register: &mut Register, op_pointer: &mut usize, output: &mut Vec<char>) -> bool{
     let opcode = program[*op_pointer];
-    let literal = program[*op_pointer + 1].to_digit(10).unwrap();
+    let literal = program[*op_pointer + 1].to_digit(10).unwrap() as u64;
     let combo = get_combo(literal, register);
+    let mut ok = true;
     match opcode {
         '0' => {
-            let div = register.a / u32::pow(2, combo);
+            let div = register.a / u64::pow(2, combo as u32);
             register.a = div;
             *op_pointer += 2;
         },
@@ -61,21 +61,69 @@ fn execute_program(program: &Vec<char>, register: &mut Register, op_pointer: &mu
             *op_pointer += 2;
         },
         '5' => {
-            output.push(combo % 8);
+            let chr = char::from_digit((combo as u32) % 8, 10).unwrap();
+            output.push(chr);
+            let ip = output.len();
+            if ip > program.len() {
+                ok = false;
+            }
+            else if ip > 0 && program[ip-1] != output[ip-1] {
+                ok = false;
+            }
             *op_pointer += 2;
         },
         '6' => {
-            let div = register.a / u32::pow(2, combo);
+            let div = register.a / u64::pow(2, combo as u32);
             register.b = div;
             *op_pointer += 2;
         },
         '7' => {
-            let div = register.a / u32::pow(2, combo);
+            let div = register.a / u64::pow(2, combo as u32);
             register.c = div;
             *op_pointer += 2;
         },
         _ => panic!("Invalid opcode"),
     };
+    ok
+}
+
+#[allow(dead_code)]
+fn part2(program: &Vec<char>) -> u64 {
+    let mut solved = false;
+    let mut a0 = u64::pow(8,program.len() as u32);
+    while !solved {
+        a0 += 1;
+        let mut register = Register{a:a0, b:0, c:0};
+        let mut output = Vec::<char>::new();
+        let mut op_pointer = 0;
+        while op_pointer < program.len() {
+            let isok = execute_program(&program, &mut register, &mut op_pointer, &mut output);
+            if !isok {
+                break;
+            }
+        }
+        if output.len() == program.len() {
+            solved = true;
+        }
+    }
+    a0
+}
+
+#[allow(dead_code)]
+fn test(program: &Vec<char>) {
+    let a0 = u64::pow(8,program.len() as u32);
+    for i in 0..10000 {
+        let mut register = Register{a:a0+i, b:0, c:0};
+        let mut output = Vec::<char>::new();
+        let mut op_pointer = 0;
+        while op_pointer < program.len() {
+            execute_program(&program, &mut register, &mut op_pointer, &mut output);
+            if output.len() > 0 && output[0] == program[0] {
+                println!("a0: {} {}", a0+i, register.a);
+                break
+            }
+        }
+    }
 }
 
 fn main() {
@@ -90,7 +138,7 @@ fn main() {
         n_line += 1;
         let line = line.unwrap();
         if i < 3 {
-            let value = line.split_whitespace().last().unwrap().parse::<u32>().unwrap();
+            let value = line.split_whitespace().last().unwrap().parse::<u64>().unwrap();
             match i {
                 0 => register.a = value,
                 1 => register.b = value,
@@ -108,7 +156,7 @@ fn main() {
         panic!("Invalid input file");
     }
     let mut op_pointer: usize = 0;
-    let mut output = Vec::<u32>::new();
+    let mut output = Vec::<char>::new();
     while op_pointer < program.len() {
         execute_program(&program, &mut register, &mut op_pointer, &mut output);
     }
@@ -119,4 +167,5 @@ fn main() {
         }
     }
     println!();
+    part2(&program);
 }
