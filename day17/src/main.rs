@@ -89,10 +89,16 @@ fn execute_program(program: &Vec<char>, register: &mut Register, op_pointer: &mu
 
 #[allow(dead_code)]
 fn part2(program: &Vec<char>) -> u64 {
-    let mut solved = false;
-    let mut a0 = u64::pow(8,program.len() as u32);
-    while !solved {
-        a0 += 1;
+    let start = u64::pow(8,program.len() as u32-1);
+    let mut step = 10;
+    let stop = start*8;
+    let mut solution = 0;
+    for a0 in start..stop {
+        let progress = (a0-start)*100/(stop-start);
+        if progress >= step {
+            println!("Progress: {} %", progress);
+            step += 10;
+        }
         let mut register = Register{a:a0, b:0, c:0};
         let mut output = Vec::<char>::new();
         let mut op_pointer = 0;
@@ -103,25 +109,26 @@ fn part2(program: &Vec<char>) -> u64 {
             }
         }
         if output.len() == program.len() {
-            solved = true;
+            solution = a0;
+            break;
         }
     }
-    a0
+    solution
 }
 
 #[allow(dead_code)]
 fn test(program: &Vec<char>) {
-    let a0 = u64::pow(8,program.len() as u32);
+    let a0 = u64::pow(8,program.len() as u32-1);
     for i in 0..10000 {
         let mut register = Register{a:a0+i, b:0, c:0};
         let mut output = Vec::<char>::new();
         let mut op_pointer = 0;
         while op_pointer < program.len() {
             execute_program(&program, &mut register, &mut op_pointer, &mut output);
-            if output.len() > 0 && output[0] == program[0] {
-                println!("a0: {} {}", a0+i, register.a);
-                break
-            }
+        }
+        let diff_size = output.len() as i32 - program.len() as i32;
+        if output[0] == program[0] {
+            println!("a0: {}; a0 % 8: {}, diff size: {}", a0+i, (a0+i)%8, diff_size);
         }
     }
 }
@@ -167,5 +174,7 @@ fn main() {
         }
     }
     println!();
-    part2(&program);
+    let a_start = part2(&program);
+    println!("Register A must be set to {}", a_start);
+    //test(&program);
 }
