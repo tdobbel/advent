@@ -27,14 +27,13 @@ fn get_combo(literal: u64, register: &Register) -> u64 {
     }
 }
 
-fn execute_program(program: &Vec<char>, register: &mut Register, op_pointer: &mut usize, output: &mut Vec<char>) -> bool{
+fn execute_program(program: &Vec<char>, register: &mut Register, op_pointer: &mut usize, output: &mut Vec<char>) {
     let opcode = program[*op_pointer];
     let literal = program[*op_pointer + 1].to_digit(10).unwrap() as u64;
     let combo = get_combo(literal, register);
-    let mut ok = true;
     match opcode {
         '0' => {
-            let div = register.a / u64::pow(2, combo as u32);
+            let div = register.a >> combo;
             register.a = div;
             *op_pointer += 2;
         },
@@ -63,74 +62,43 @@ fn execute_program(program: &Vec<char>, register: &mut Register, op_pointer: &mu
         '5' => {
             let chr = char::from_digit((combo as u32) % 8, 10).unwrap();
             output.push(chr);
-            let ip = output.len();
-            if ip > program.len() {
-                ok = false;
-            }
-            else if ip > 0 && program[ip-1] != output[ip-1] {
-                ok = false;
-            }
             *op_pointer += 2;
         },
         '6' => {
-            let div = register.a / u64::pow(2, combo as u32);
-            register.b = div;
+            register.b = register.a >> combo;
             *op_pointer += 2;
         },
         '7' => {
-            let div = register.a / u64::pow(2, combo as u32);
-            register.c = div;
+            register.c = register.a >> combo;
             *op_pointer += 2;
         },
         _ => panic!("Invalid opcode"),
     };
-    ok
 }
 
-#[allow(dead_code)]
-fn part2(program: &Vec<char>) -> u64 {
-    let start = u64::pow(8,program.len() as u32-1);
-    let mut step = 10;
-    let stop = start*8;
-    let mut solution = 0;
-    for a0 in start..stop {
-        let progress = (a0-start)*100/(stop-start);
-        if progress >= step {
-            println!("Progress: {} %", progress);
-            step += 10;
-        }
-        let mut register = Register{a:a0, b:0, c:0};
-        let mut output = Vec::<char>::new();
+// I definitely cheated for this one. Thank you to HyperNeutrino for his video
+fn part2(program: &Vec<char>, prev: u64, n: usize) -> Option<u64> {
+    if n == 0 {
+        return Some(prev);
+    }
+    for i in 0..8 {
+        let a = prev << 3 | i;
+        let mut register = Register {a, b:0, c:0};
         let mut op_pointer = 0;
-        while op_pointer < program.len() {
-            let isok = execute_program(&program, &mut register, &mut op_pointer, &mut output);
-            if !isok {
-                break;
+        let mut output = Vec::<char>::new();
+        while op_pointer < program.len()-2 {
+            execute_program(program, &mut register, &mut op_pointer, &mut output);
+        }
+        let value = output.pop().unwrap();
+        if value == program[n-1] {
+            let result = part2(program, a, n-1);
+            match result {
+                Some(_) => return result,
+                None => continue,
             }
         }
-        if output.len() == program.len() {
-            solution = a0;
-            break;
-        }
     }
-    solution
-}
-
-#[allow(dead_code)]
-fn test(program: &Vec<char>) {
-    let a0 = u64::pow(8,program.len() as u32-1);
-    for i in 0..10000 {
-        let mut register = Register{a:a0+i, b:0, c:0};
-        let mut output = Vec::<char>::new();
-        let mut op_pointer = 0;
-        while op_pointer < program.len() {
-            execute_program(&program, &mut register, &mut op_pointer, &mut output);
-        }
-        let diff_size = output.len() as i32 - program.len() as i32;
-        if output[0] == program[0] {
-            println!("a0: {}; a0 % 8: {}, diff size: {}", a0+i, (a0+i)%8, diff_size);
-        }
-    }
+    return None;
 }
 
 fn main() {
@@ -174,7 +142,9 @@ fn main() {
         }
     }
     println!();
-    let a_start = part2(&program);
-    println!("Register A must be set to {}", a_start);
+    match part2(&program, 0, program.len()) {
+        Some(v) => println!("Register A must be set to {}", v),
+        None => println!("No solution found"),
+    }
     //test(&program);
 }
