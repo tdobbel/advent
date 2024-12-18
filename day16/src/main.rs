@@ -65,14 +65,14 @@ fn turn_right(direction: &Direction) -> Direction {
     }
 }
 
-fn get_next_cells(mc: &MazeCell, walls: &Vec<(i32,i32)>) -> Vec<MazeCell> {
+fn get_next_cells(mc: &MazeCell, walls: &Vec<(i32,i32)>, closed: &mut Vec<(i32,i32)>) -> Vec<MazeCell> {
     let left_dir = turn_left(&mc.direction);
     let right_dir = turn_right(&mc.direction);
     let mut cells = Vec::<MazeCell>::new();
     for (i,d) in [mc.direction.clone(), left_dir, right_dir].iter().enumerate() {
         let (shiftx, shifty) = displacement(d);
         let (x, y) = (mc.x+shiftx, mc.y+shifty);
-        if walls.contains(&(x,y)) || mc.visited.contains(&(x,y)) {
+        if walls.contains(&(x,y)) || mc.visited.contains(&(x,y)) || closed.contains(&(x,y)) {
             continue;
         }
         let mut visited = mc.visited.clone();
@@ -83,6 +83,7 @@ fn get_next_cells(mc: &MazeCell, walls: &Vec<(i32,i32)>) -> Vec<MazeCell> {
         } else {
             score += 1001;
         }
+        closed.push((x, y));
         cells.push(MazeCell { x, y, direction: d.clone(), score, visited });
     }
     cells
@@ -117,13 +118,10 @@ fn solve_maze(
             score = best.score;
             break;
         }
-        let new_cells = get_next_cells(best, walls);
+        let new_cells = get_next_cells(best, walls, closed);
         closed.push((best.x, best.y));
         candidates.remove(ibest);
         for cell in new_cells {
-            if closed.contains(&(cell.x, cell.y)) {
-                continue;
-            }
             candidates.push(cell);
         }
         if candidates.len() == 0 {
@@ -141,7 +139,7 @@ fn get_sub_path(
     let mut tile = MazeCell { x: start.0, y: start.1, direction: Direction::Right, score: 0, visited: Vec::<(i32,i32)>::new() };
     for i in 1..n {
         closed.push((tile.x, tile.y));
-        let next_tiles = get_next_cells(&tile, walls);
+        let next_tiles = get_next_cells(&tile, walls, closed);
         for next_tile in next_tiles {
             if next_tile.x == ref_path[i].0 && next_tile.y == ref_path[i].1 {
                 tile = next_tile;
