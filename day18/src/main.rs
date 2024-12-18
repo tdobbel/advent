@@ -58,7 +58,9 @@ fn get_next_moves(path: &Vec<(i32,i32)>, n: &i32, corrupted: &Vec<(i32,i32)>, cl
     new_paths
 }
 
-fn find_shortest_path(queue: &mut Vec<Vec<(i32,i32)>>, n: &i32, corrupted: &Vec<(i32,i32)>, closed: &mut Vec<(i32,i32)>) -> Vec<(i32,i32)> {
+fn find_shortest_path(
+    queue: &mut Vec<Vec<(i32,i32)>>, n: &i32, corrupted: &Vec<(i32,i32)>, closed: &mut Vec<(i32,i32)>
+) -> Option<Vec<(i32,i32)>> {
     while queue.len() > 0 {
         let mut ibest: usize = 0;
         let mut best_score = i32::MAX;
@@ -73,7 +75,7 @@ fn find_shortest_path(queue: &mut Vec<Vec<(i32,i32)>>, n: &i32, corrupted: &Vec<
         let best = &queue[ibest];
         let last = best.last().unwrap();
         if  last.0 == *n-1 && last.1 == *n-1 {
-            return best.clone()
+            return Some(best.clone())
         }
         closed.push(*last);
         let new_paths = get_next_moves(best, n, corrupted, closed);
@@ -82,7 +84,7 @@ fn find_shortest_path(queue: &mut Vec<Vec<(i32,i32)>>, n: &i32, corrupted: &Vec<
             queue.push(path);
         }
     }
-    return Vec::<(i32,i32)>::new();
+    None
 }
 
 fn main() {
@@ -103,10 +105,12 @@ fn main() {
     let file = File::open(filename).unwrap();
     let reader = BufReader::new(file);
     let mut bytes = Vec::<(i32, i32)>::new();
+    let mut n_byte = 0;
     for line in reader.lines() {
         let line = line.unwrap();
         let xy = line.split(",").map(|x| x.parse::<i32>().unwrap()).collect::<Vec<i32>>();
         bytes.push((xy[0], xy[1]));
+        n_byte += 1;
     }
     let corrupted = &bytes[..n_sel].to_vec().clone();
     let mut closed = Vec::<(i32,i32)>::new();
@@ -114,6 +118,24 @@ fn main() {
     path.push((0,0));
     let mut queue = vec![path];
     let path = find_shortest_path(&mut queue, &n, &corrupted, &mut closed);
+    let path = path.unwrap();
     plot_path(&path, &n, &corrupted);
     println!("Part 1: {} steps needed to get to the exit", path.len()-1);
+    let mut start = n_sel;
+    let mut stop = n_byte;
+    while stop-start > 1 {
+        let mid = (start+stop)/2;
+        closed = closed[..0].to_vec();
+        queue = vec![vec![(0,0)]];
+        let corrupted = &bytes[..mid+1].to_vec().clone();
+        match find_shortest_path(&mut queue, &n, &corrupted, &mut closed) {
+            Some(_) => {
+                start = mid+1;
+            },
+            None => {
+                stop = mid;
+            }
+        };
+    }
+    println!("Part 2: Unable to reah exit with byte {:?}", bytes[stop]);
 }
