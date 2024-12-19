@@ -57,6 +57,29 @@ fn ispossible_split(design: &str, patterns: &Vec<Vec<&str>>, nmax: &usize) -> bo
     false
 }
 
+fn find_all_ways_split(design: &str, patterns: &Vec<Vec<&str>>, nmax: &usize, ways: &mut Vec<String>) {
+    if design.len() < 2*nmax {
+        find_all_ways(design, patterns, nmax, String::from(""), ways);
+        return
+    }
+    let mid = design.len() / 2;
+    let start = mid - nmax/2;
+    let stop = mid + nmax/2;
+    for pivot in start..stop+1 {
+        let mut ways_ = Vec::<String>::new();
+        find_all_ways_split(&design[..pivot], patterns, nmax, &mut ways_);
+        let n_left = ways_.len();
+        find_all_ways_split(&design[pivot..], patterns, nmax, &mut ways_);
+        for il in 0..n_left {
+            for ir in n_left..ways_.len() {
+                let combined = format!("{},{}", ways_[il], ways_[ir]);
+                ways.push(combined);
+            }
+        }
+
+    }
+}
+
 fn main() {
     let args: Vec<String> = env::args().collect();
     assert_eq!(args.len(), 2);
@@ -76,18 +99,21 @@ fn main() {
     }
     let mut n_possible = 0;
     let mut n_ways = 0;
+    let mut cntr = 0;
     while let Some(line) = lines.next() {
         let line = line.unwrap();
         if line.len() == 0 {
             continue;
         }
-        if ispossible_split(&line, &sorted_towels, &nmax) {
+        cntr += 1;
+        println!("{}", cntr);
+        let possible = ispossible_split(&line, &sorted_towels, &nmax);
+        if  possible {
             n_possible += 1;
+            let mut ways = Vec::<String>::new();
+            find_all_ways_split(&line, &sorted_towels, &nmax, &mut ways);
+            n_ways += ways.iter().collect::<HashSet<_>>().len();
         }
-        let prev = String::from("");
-        let mut ways = Vec::<String>::new();
-        find_all_ways(&line, &sorted_towels, &nmax, prev, &mut ways);
-        n_ways += ways.iter().collect::<HashSet<_>>().len();
     }
     println!("{} designs are possible", n_possible);
     println!("{} possible ways", n_ways);
