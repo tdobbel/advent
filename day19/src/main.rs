@@ -111,5 +111,5 @@ fn main() {
         }
     }
     println!("{} designs are possible", n_possible);
-    println!("{} designs are possible", n_ways);
+    println!("There are {} ways to obtain these designs", n_ways);
 }
