@@ -1,9 +1,9 @@
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::cmp::{max,min};
-use std::collections::HashSet;
 use std::env;
 
+#[allow(dead_code)]
 fn ispossible(design: &str, patterns: &Vec<Vec<&str>>, nmax: &usize) -> bool {
     if design.len() == 0 {
         return true;
@@ -20,6 +20,7 @@ fn ispossible(design: &str, patterns: &Vec<Vec<&str>>, nmax: &usize) -> bool {
     false
 }
 
+#[allow(dead_code)]
 fn find_all_ways(design: &str, patterns: &Vec<Vec<&str>>, nmax: &usize, prev: String, ways: &mut Vec<String>) {
     if design.len() == 0 {
         ways.push(prev);
@@ -42,6 +43,7 @@ fn find_all_ways(design: &str, patterns: &Vec<Vec<&str>>, nmax: &usize, prev: St
     }
 }
 
+#[allow(dead_code)]
 fn ispossible_split(design: &str, patterns: &Vec<Vec<&str>>, nmax: &usize) -> bool {
     if design.len() < 2*nmax {
         return ispossible(design, patterns, nmax);
@@ -57,27 +59,27 @@ fn ispossible_split(design: &str, patterns: &Vec<Vec<&str>>, nmax: &usize) -> bo
     false
 }
 
-fn find_all_ways_split(design: &str, patterns: &Vec<Vec<&str>>, nmax: &usize, ways: &mut Vec<String>) {
-    if design.len() < 2*nmax {
-        find_all_ways(design, patterns, nmax, String::from(""), ways);
-        return
+fn count_possibilities(design: &str, patterns: &Vec<Vec<&str>>, nmax: &usize) -> u64 {
+    let mut counter: Vec<u64> = vec![0; design.len()];
+    if patterns[0].contains(&&design[..1]) {
+        counter[0] = 1
     }
-    let mid = design.len() / 2;
-    let start = mid - nmax/2;
-    let stop = mid + nmax/2;
-    for pivot in start..stop+1 {
-        let mut ways_ = Vec::<String>::new();
-        find_all_ways_split(&design[..pivot], patterns, nmax, &mut ways_);
-        let n_left = ways_.len();
-        find_all_ways_split(&design[pivot..], patterns, nmax, &mut ways_);
-        for il in 0..n_left {
-            for ir in n_left..ways_.len() {
-                let combined = format!("{},{}", ways_[il], ways_[ir]);
-                ways.push(combined);
+    for i in 1..design.len() {
+        let stop = i+1;
+        for j in 0..min(*nmax,i+1) {
+            let start = i-j;
+            if patterns[j].contains(&&design[start..stop]) {
+                if start > 0 {
+                    counter[i] += counter[start-1]
+                }
+                else {
+                    counter[i] += 1;
+                }
             }
         }
 
     }
+    counter[counter.len()-1]
 }
 
 fn main() {
@@ -98,23 +100,19 @@ fn main() {
         sorted_towels.push(selected);
     }
     let mut n_possible = 0;
-    let mut n_ways = 0;
-    let mut cntr = 0;
+    let mut n_ways: u64 = 0;
     while let Some(line) = lines.next() {
         let line = line.unwrap();
         if line.len() == 0 {
             continue;
         }
-        cntr += 1;
-        println!("{}", cntr);
-        let possible = ispossible_split(&line, &sorted_towels, &nmax);
-        if  possible {
+        //let possible = ispossible_split(&line, &sorted_towels, &nmax);
+        let n_sol = count_possibilities(&line, &sorted_towels, &nmax);
+        if n_sol > 0 {
             n_possible += 1;
-            let mut ways = Vec::<String>::new();
-            find_all_ways_split(&line, &sorted_towels, &nmax, &mut ways);
-            n_ways += ways.iter().collect::<HashSet<_>>().len();
+            n_ways += n_sol;
         }
     }
     println!("{} designs are possible", n_possible);
-    println!("{} possible ways", n_ways);
+    println!("{} designs are possible", n_ways);
 }
