@@ -61,10 +61,7 @@ fn ispossible_split(design: &str, patterns: &Vec<Vec<&str>>, nmax: &usize) -> bo
 
 fn count_possibilities(design: &str, patterns: &Vec<Vec<&str>>, nmax: &usize) -> u64 {
     let mut counter: Vec<u64> = vec![0; design.len()];
-    if patterns[0].contains(&&design[..1]) {
-        counter[0] = 1
-    }
-    for i in 1..design.len() {
+    for i in 0..design.len() {
         let stop = i+1;
         for j in 0..min(*nmax,i+1) {
             let start = i-j;
