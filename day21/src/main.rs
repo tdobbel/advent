@@ -135,9 +135,16 @@ fn part1(line: &str, numeric_keypad: &HashMap<char,(i32,i32)>, directional_keypa
                 let mut motions = Vec::<String>::new();
                 get_all_paths(pos, &c, keypad, nogo, &seed, &mut motions);
                 let mut next = Vec::<String>::new();
+                let mut cutoff = usize::MAX;
+                for tail in motions.iter() {
+                    cutoff = min(tail.len(), cutoff);
+                }
                 pos = *keypad.get(&c).unwrap();
                 for head in prev.iter() {
                     for tail in motions.iter() {
+                        if tail.len() > cutoff{
+                            continue
+                        }
                         next.push(format!("{}{}", head, tail));
                     }
                 }
