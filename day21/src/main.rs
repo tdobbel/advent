@@ -15,34 +15,6 @@ fn icon_to_dx(icon: char) -> (i32,i32) {
 }
 
 #[allow(dead_code)]
-fn keys_to_motion(keys: &str, keypad: &HashMap<char,(i32,i32)>, position: &mut (i32,i32), nogo: (i32,i32)) -> String {
-    let mut motions = String::new();
-    for key in keys.chars() {
-        let dst = keypad.get(&key).unwrap();
-        while *position != *dst {
-            let delta_row = dst.0 - position.0;
-            let delta_col = dst.1 - position.1;
-            for motion in "^>v<".chars() {
-                let (dy, dx) = icon_to_dx(motion);
-                if delta_col*dx == 0 && delta_row*dy == 0 {
-                    continue;
-                }
-                if delta_row*dy < 0 || delta_col*dx < 0 {
-                    continue;
-                }
-                let new_pos = (position.0 + dy, position.1 + dx);
-                if new_pos != nogo {
-                    motions.push(motion);
-                    *position = new_pos;
-                    break;
-                }
-            }
-        }
-        motions.push_str("A");
-    }
-    motions
-}
-
 fn get_all_paths(
     pos_from: (i32,i32), key_to: &char, keypad: &HashMap<char,(i32,i32)>,
     nogo: (i32,i32), prev: &str, motions: &mut Vec<String>
@@ -69,6 +41,35 @@ fn get_all_paths(
         let keys = format!("{}{}", prev, motion);
         get_all_paths(new_pos, key_to, keypad, nogo, &keys, motions);
     }
+}
+
+fn keys_to_motions(keys: &str, key_pad: &HashMap<char,(i32,i32)>, pos: &mut (i32,i32), nogo: (i32,i32)) -> String {
+    let mut motions = String::new();
+    for c in keys.chars() {
+        let pos_to = key_pad.get(&c).unwrap();
+        while pos != pos_to {
+            let delta_row = pos_to.0 - pos.0;
+            let delta_col = pos_to.1 - pos.1;
+            let mut options = Vec::<char>::new();
+            if delta_row != 0 {
+                options.push(if delta_row > 0 {'v'} else {'^'});
+            }
+            if delta_col != 0 {
+                options.push(if delta_col > 0 {'>'} else {'<'});
+            }
+            for motion in options.iter() {
+                let (dy, dx) = icon_to_dx(*motion);
+                let new_pos = (pos.0 + dy, pos.1 + dx);
+                if new_pos != nogo {
+                    motions.push(*motion);
+                    *pos = new_pos;
+                    break;
+                }
+            }
+        }
+        motions.push('A');
+    }
+    motions
 }
 
 #[allow(dead_code)]
@@ -108,6 +109,40 @@ fn sanity_check(human_moves: &str, numeric_keypad: &HashMap<char,(i32,i32)>, dir
     println!("keys pressed: {}", keys);
 }
 
+fn min_distance(
+    char_from: char, char_to: char, keypad: &HashMap<char,(i32,i32)> , depth: i32,
+    cache: &mut HashMap<(char,char,i32),i32>, paths: &HashMap<(char,char),Vec<String>>
+) -> i32 {
+    if depth == 0 {
+        let pfrom = *keypad.get(&char_from).unwrap();
+        let pto = *keypad.get(&char_to).unwrap();
+        return (pfrom.0 - pto.0).abs() + (pfrom.1 - pto.1).abs() + 1;
+    }
+    let paths_ = paths.get(&(char_from,char_to)).unwrap();
+    let mut shortest = i32::MAX;
+    for path in paths_.iter() {
+        let mut kfrom = 'A';
+        let mut path_length = 0;
+        for c in path.chars() {
+            let d = match cache.get(&(kfrom, c, depth-1)) {
+                Some(&v) => v,
+                None => {
+                    let v = min_distance(kfrom, c, keypad, depth-1, cache, paths);
+                    cache.insert((kfrom, c, depth-1), v);
+                    v
+                },
+            };
+            path_length += d;
+            kfrom = c;
+        }
+        if path_length < shortest {
+            shortest = path_length;
+        }
+    }
+    shortest
+}
+
+#[allow(dead_code)]
 fn part1(line: &str, numeric_keypad: &HashMap<char,(i32,i32)>, directional_keypad: &HashMap<char,(i32,i32)>) -> usize {
     let mut options = Vec::<String>::new();
     options.push(line.to_string());
@@ -191,12 +226,27 @@ fn main() {
     directional_keypad.insert('v', (1,1));
     directional_keypad.insert('>', (1,2));
 
+    let mut cache = HashMap::<(char,char,i32),i32>::new();
+    let mut paths = HashMap::<(char,char),Vec<String>>::new();
+    for (key_from, pos_from) in directional_keypad.iter() {
+        for (key_to,_) in directional_keypad.iter() {
+            let mut motions = Vec::<String>::new();
+            get_all_paths(*pos_from, key_to, &directional_keypad, (0,0), "", &mut motions);
+            paths.insert((*key_from,*key_to), motions);
+        }
+    }
     let file = File::open(&args[1]).unwrap();
     let reader = BufReader::new(file);
-    let mut total = 0;
     for line in reader.lines() {
         let line = line.unwrap();
-        total += part1(&line, &numeric_keypad, &directional_keypad);
+        let moves = keys_to_motions(&line, &numeric_keypad, &mut (3,2), (3,0));
+        let mut total = 0;
+        for i in 0..moves.len()-1 {
+            let key_from = moves.chars().nth(i).unwrap();
+            let key_to = moves.chars().nth(i+1).unwrap();
+            total += min_distance(key_from, key_to, &directional_keypad, 2, &mut cache, &paths);
+        }
+        println!("{}: {}", line, total);
     }
-    println!("Sum of complexities: {}", total);
+    //println!("Sum of complexities: {}", total);
 }
