@@ -16,6 +16,7 @@ struct Gate {
     input1: String,
     input2: String,
     output: String,
+    depth: usize,
 }
 
 fn get_kth_bit(n: u64, k: usize) -> u8 {
@@ -54,6 +55,16 @@ fn build_connectivity(gates: &Vec<Gate>) -> HashMap<usize,(Vec<usize>, Vec<usize
         }
     }
     conn
+}
+
+fn attribute_depth(
+    gates: &mut Vec<Gate>, conn: &HashMap<usize,(Vec<usize>,Vec<usize>)>, indices: &Vec<usize>, depth: usize
+) {
+    for ig in indices.iter() {
+        gates[*ig].depth = depth;
+        let next = conn.get(ig).unwrap().1.clone();
+        attribute_depth(gates, conn, &next, depth + 1);
+    }
 }
 
 fn solve_gates(gates: &Vec<Gate>, wire_values: &mut HashMap<String,Option<u8>>) -> bool{
@@ -197,7 +208,6 @@ fn find_switches(
                 switches.push(gates[*r].output.as_str());
             }
             switches.sort();
-            //println!("{}",switches.join(","));
             results.push(switches.join(","));
         }
         return
@@ -282,6 +292,7 @@ fn main() {
                 input1: parts[0].to_string(),
                 input2: parts[2].to_string(),
                 output: parts[4].to_string(),
+                depth: 0,
             };
             let wires = vec![gate.input1.clone(), gate.input2.clone(), gate.output.clone()];
             for wire in wires {
@@ -294,6 +305,13 @@ fn main() {
         }
     }
     let connectivity = build_connectivity(&gates);
+    let mut indx0 = Vec::<usize>::new();
+    for (i,c) in connectivity.iter() {
+        if c.0.len() == 0 {
+            indx0.push(*i);
+        }
+    }
+    attribute_depth(&mut gates, &connectivity, &indx0, 0);
     let mut z_wires = wire_values.keys().filter(|k| k.starts_with('z')).map(|v| v.clone()).collect::<Vec<String>>();
     z_wires.sort();
     let initial_state = wire_values.clone();
@@ -309,9 +327,11 @@ fn main() {
         find_upstream_gates(&gates, wire, &mut wire_values, &bad_bits, &connectivity, &mut to_one, &mut to_zero);
     }
     let mut saves = HashMap::<(usize,usize),Vec<String>>::new();
-    println!("Finding bits saved by switches");
     for (indx_left,_) in to_one.iter() {
         for (indx_right,_) in to_zero.iter() {
+            //if gates[*indx_left].depth != gates[*indx_right].depth {
+            //    continue;
+            //}
             switch_outputs(&mut gates, *indx_left, *indx_right);
             let mut wire_values = initial_state.clone();
             let solved = solve_gates(&gates, &mut wire_values);
@@ -347,6 +367,7 @@ fn main() {
             }
         }
     }
+    println!("Switches found: {}", saves.len());
     println!("Inch allah");
     let mut results = Vec::<String>::new();
     find_switches(
