@@ -187,7 +187,7 @@ fn find_upstream_gates(
 fn find_switches(
     saves: &HashMap<(usize,usize),Vec<String>>, start_index: i32, left: Vec<usize>, right: Vec<usize>,
     fixed_bits: Vec<String>, gates: &Vec<Gate>, initial_state: &HashMap<String,Option<u8>>,
-    z_wires: &Vec<String>, expected: u64, results: &mut Vec<String>
+    z_wires: &Vec<String>, expected: u64, results: &mut HashSet<String>
 ) {
     if left.len() == 4 {
         if fixed_bits.len() == 14 {
@@ -208,8 +208,7 @@ fn find_switches(
                 switches.push(gates[*r].output.as_str());
             }
             switches.sort();
-            println!("{}", switches.join(","));
-            results.push(switches.join(","));
+            results.insert(switches.join(","));
         }
         return
     }
@@ -373,11 +372,31 @@ fn main() {
             }
         }
     }
-    println!("Switches found: {}", saves.len());
-    println!("Inch allah");
-    let mut results = Vec::<String>::new();
+    println!("{} possible swaps found", saves.len());
+    let mut results = HashSet::<String>::new();
     find_switches(
         &saves, 0, Vec::<usize>::new(), Vec::<usize>::new(), Vec::<String>::new(),
         &gates, &initial_state, &z_wires, expected, &mut results
     );
+    println!("{} solutions found", results.len());
+    for seq in results.iter() {
+        let outputs = seq.split(",").collect::<Vec<&str>>();
+        let mut ok = true;
+        for output in outputs {
+            let mut depth = 0;
+            for gate in gates.iter() {
+                if gate.output == output {
+                    depth = gate.depth;
+                    break;
+                }
+            }
+            if depth > 0 {
+                ok = false;
+                break;
+            }
+        }
+        if ok {
+            println!("Switch sequence: {}", seq);
+        }
+    }
 }
