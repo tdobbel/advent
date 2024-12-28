@@ -3,14 +3,14 @@ use std::io::{BufRead, BufReader};
 use std::collections::{HashMap,HashSet};
 use std::env;
 
-#[derive(Debug)]
+#[derive(Debug,Clone)]
 enum Operation {
     AND,
     OR,
     XOR,
 }
 
-#[derive(Debug)]
+#[derive(Debug,Clone)]
 struct Gate {
     operation: Operation,
     input1: String,
@@ -18,12 +18,10 @@ struct Gate {
     output: String,
 }
 
-#[allow(dead_code)]
 fn get_kth_bit(n: u64, k: usize) -> u8 {
     ((n >> k) & 1) as u8
 }
 
-#[allow(dead_code)]
 fn switch_outputs(gates: &mut Vec<Gate>, index1: usize, index2: usize) {
     let tmp = gates[index1].output.clone();
     gates[index1].output = gates[index2].output.clone();
@@ -46,10 +44,11 @@ fn build_connectivity(gates: &Vec<Gate>) -> HashMap<usize,(Vec<usize>, Vec<usize
     conn
 }
 
-fn solve_gates(gates: &Vec<Gate>, wire_values: &mut HashMap<String,Option<u8>>) {
+fn solve_gates(gates: &Vec<Gate>, wire_values: &mut HashMap<String,Option<u8>>) -> bool{
     let n_wires = wire_values.len();
     let mut n_values = wire_values.iter().filter(|(_,v)| v.is_some()).count();
     while n_values < n_wires {
+        let n_prev = n_values;
         for gate in gates.iter() {
             match wire_values.get(&gate.output).unwrap() {
                 Some(_) => continue,
@@ -72,7 +71,11 @@ fn solve_gates(gates: &Vec<Gate>, wire_values: &mut HashMap<String,Option<u8>>) 
             });
             n_values += 1;
         }
+        if n_values == n_prev {
+            return false;
+        }
     }
+    true
 }
 
 fn recompute_gates(
@@ -98,7 +101,7 @@ fn recompute_gates(
 fn find_upstream_gates(
     gates: &Vec<Gate>, wire: &String, wire_values: &HashMap<String,Option<u8>>,
     bad_bits: &Vec<String>, connectivity: &HashMap<usize,(Vec<usize>,Vec<usize>)>,
-    to_one: &mut Vec<usize>, to_zero: &mut Vec<usize>
+    to_one: &mut HashMap<usize,Vec<String>>, to_zero: &mut HashMap<usize,Vec<String>>
 ) {
     let index = gates.iter().position(|g| g.output == *wire).unwrap();
     let mut gate_ids = HashSet::<usize>::new();
@@ -123,7 +126,7 @@ fn find_upstream_gates(
         let next = connectivity.get(start_gate).unwrap();
         recompute_gates(gates, &mut new_values, connectivity, &next.1);
         let mut ok = true;
-        let mut changed = 0;
+        let mut changed = Vec::<String>::new();
         for (tag, value) in new_values.iter() {
             if !tag.starts_with('z') {
                 continue;
@@ -133,18 +136,82 @@ fn find_upstream_gates(
                     ok = false;
                     break;
                 }
-                changed += 1;
+                changed.push(tag.clone());
             }
         }
-        if !ok || changed == 0 {
+        if !ok || changed.len() == 0 {
             continue;
         }
-        if iszero && !to_one.contains(start_gate) {
-            to_one.push(*start_gate);
+        if iszero {
+            let taglist = to_one.entry(*start_gate).or_insert(Vec::<String>::new());
+            for tag in changed.iter() {
+                if !taglist.contains(tag) {
+                    taglist.push(tag.clone());
+                }
+            }
         }
-        if !iszero && !to_zero.contains(start_gate){
-            to_zero.push(*start_gate);
+        else {
+            let taglist = to_zero.entry(*start_gate).or_insert(Vec::<String>::new());
+            for tag in changed.iter() {
+                if !taglist.contains(tag) {
+                    taglist.push(tag.clone());
+                }
+            }
         }
+    }
+}
+
+fn find_switches(
+    saves: &HashMap<(usize,usize),Vec<String>>, left: Vec<usize>, right: Vec<usize>, fixed_bits: Vec<String>,
+    gates: &Vec<Gate>, initial_state: &HashMap<String,Option<u8>>, z_wires: &Vec<String>, expected: u64,
+    results: &mut Vec<String>
+) {
+    if left.len() == 4 {
+        if fixed_bits.len() == 14 {
+            let result: Vec<(usize,usize)> = (0..4).map(|i| (left[i],right[i])).collect();
+            let mut test_gates = gates.clone();
+            for (l,r) in result.iter() {
+                switch_outputs(&mut test_gates, *l, *r);
+            }
+            let mut wire_values = initial_state.clone();
+            solve_gates(&test_gates, &mut wire_values);
+            let bad_bits = check_results(&wire_values, z_wires, expected);
+            if bad_bits.len() > 0 {
+                return;
+            }
+            let mut switches = Vec::<&str>::new();
+            for (l,r) in result.iter() {
+                switches.push(gates[*l].output.as_str());
+                switches.push(gates[*r].output.as_str());
+            }
+            switches.sort();
+            println!("{}",switches.join(","));
+            results.push(switches.join(","));
+        }
+        return
+    }
+    for (pair,saved) in saves.iter() {
+        let (lhs, rhs) = pair;
+        if left.contains(lhs) || right.contains(rhs) {
+            continue;
+        }
+        let mut add = true;
+        for bit in saved.iter() {
+            if fixed_bits.contains(bit) {
+                add = false;
+                break;
+            }
+        }
+        if !add {
+            continue;
+        }
+        let mut fixed = fixed_bits.clone();
+        fixed.extend(saved.clone());
+        let mut left_ = left.clone();
+        left_.push(*lhs);
+        let mut right_ = right.clone();
+        right_.push(*rhs);
+        find_switches(saves, left_, right_, fixed, gates, initial_state, z_wires, expected, results);
     }
 }
 
@@ -217,6 +284,7 @@ fn main() {
     let connectivity = build_connectivity(&gates);
     let mut z_wires = wire_values.keys().filter(|k| k.starts_with('z')).map(|v| v.clone()).collect::<Vec<String>>();
     z_wires.sort();
+    let initial_state = wire_values.clone();
     solve_gates(&gates, &mut wire_values);
     let expected = x + y;
     let mut result: u64 = 0;
@@ -230,12 +298,55 @@ fn main() {
     println!("Result: {}", result);
     // Part 2
     let bad_bits = check_results(&wire_values, &z_wires, expected);
-    let mut to_one = Vec::<usize>::new();
-    let mut to_zero = Vec::<usize>::new();
+    println!("{}", bad_bits.len());
+    let mut to_one = HashMap::<usize,Vec<String>>::new();
+    let mut to_zero = HashMap::<usize,Vec<String>>::new();
     for wire in bad_bits.iter() {
         find_upstream_gates(&gates, wire, &mut wire_values, &bad_bits, &connectivity, &mut to_one, &mut to_zero);
     }
-    println!("{}", to_one.len());
-    println!("{}", to_zero.len());
-    println!("{}", gates.len());
+    let mut saves = HashMap::<(usize,usize),Vec<String>>::new();
+    println!("Finding bits saved by switches");
+    for (indx_left,_) in to_one.iter() {
+        for (indx_right,_) in to_zero.iter() {
+            switch_outputs(&mut gates, *indx_left, *indx_right);
+            let mut wire_values = initial_state.clone();
+            let solved = solve_gates(&gates, &mut wire_values);
+            switch_outputs(&mut gates, *indx_left, *indx_right);
+            if !solved {
+                continue;
+            }
+            let new_bad = check_results(&wire_values, &z_wires, expected);
+            // If more broken bits or no save, skip
+            if new_bad.len() >= bad_bits.len() {
+                continue
+            }
+            let mut ok = true;
+            // If any of the new broken bits are not in the original set, skip
+            for wire in new_bad.iter() {
+                if !bad_bits.contains(wire) {
+                    ok = false;
+                    break;
+                }
+            }
+            if !ok {
+                continue
+            }
+            let mut saved_bits = Vec::<String>::new();
+            for wire in bad_bits.iter() {
+                if !new_bad.contains(wire) {
+                    saved_bits.push(wire.clone());
+                }
+            }
+            if ok {
+                //println!("({} {}) -> {:?}", indx_left, indx_right, saved_bits);
+                saves.insert((*indx_left,*indx_right), saved_bits);
+            }
+        }
+    }
+    println!("Inch allah");
+    let mut results = Vec::<String>::new();
+    find_switches(
+        &saves, Vec::<usize>::new(), Vec::<usize>::new(), Vec::<String>::new(),
+        &gates, &initial_state, &z_wires, expected, &mut results
+    );
 }
