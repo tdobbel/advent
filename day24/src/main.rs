@@ -22,6 +22,18 @@ fn get_kth_bit(n: u64, k: usize) -> u8 {
     ((n >> k) & 1) as u8
 }
 
+fn eval_sol(wire_values: &HashMap<String,Option<u8>>, z_wires: &Vec<String>) -> u64 {
+    let mut result: u64 = 0;
+    for (i,wire) in z_wires.iter().enumerate() {
+        let value = match wire_values.get(wire).unwrap() {
+            Some(v) => *v,
+            None => panic!("Wire {} not solved", wire),
+        };
+        result += (value as u64) << i;
+    }
+    result
+}
+
 fn switch_outputs(gates: &mut Vec<Gate>, index1: usize, index2: usize) {
     let tmp = gates[index1].output.clone();
     gates[index1].output = gates[index2].output.clone();
@@ -185,7 +197,7 @@ fn find_switches(
                 switches.push(gates[*r].output.as_str());
             }
             switches.sort();
-            println!("{}",switches.join(","));
+            //println!("{}",switches.join(","));
             results.push(switches.join(","));
         }
         return
@@ -287,18 +299,10 @@ fn main() {
     let initial_state = wire_values.clone();
     solve_gates(&gates, &mut wire_values);
     let expected = x + y;
-    let mut result: u64 = 0;
-    for (i,wire) in z_wires.iter().enumerate() {
-        let value = match wire_values.get(wire).unwrap() {
-            Some(v) => *v,
-            None => panic!("Wire {} not solved", wire),
-        };
-        result += (value as u64) << i;
-    }
+    let result = eval_sol(&wire_values, &z_wires);
     println!("Result: {}", result);
     // Part 2
     let bad_bits = check_results(&wire_values, &z_wires, expected);
-    println!("{}", bad_bits.len());
     let mut to_one = HashMap::<usize,Vec<String>>::new();
     let mut to_zero = HashMap::<usize,Vec<String>>::new();
     for wire in bad_bits.iter() {
