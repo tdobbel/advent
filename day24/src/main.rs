@@ -16,7 +16,8 @@ struct Gate {
     input1: String,
     input2: String,
     output: String,
-    depth: usize,
+    prev: Vec<usize>,
+    next: Vec<usize>
 }
 
 fn get_kth_bit(n: u64, k: usize) -> u8 {
@@ -41,31 +42,20 @@ fn switch_outputs(gates: &mut Vec<Gate>, index1: usize, index2: usize) {
     gates[index2].output = tmp;
 }
 
-fn build_connectivity(gates: &Vec<Gate>) -> HashMap<usize,(Vec<usize>, Vec<usize>)>{
-    let mut conn = HashMap::<usize,(Vec<usize>, Vec<usize>)>::new();
+fn build_connectivity(gates: &mut Vec<Gate>) {
     for i in 0..gates.len() {
-        conn.entry(i).or_insert((Vec::<usize>::new(), Vec::<usize>::new()));
-    }
-    for (i,gate) in gates.iter().enumerate() {
-        for (j,other) in gates.iter().enumerate() {
-            if gate.input1 == other.output || gate.input2 == other.output {
-                conn.entry(i).and_modify(|v| v.0.push(j));
-                conn.entry(j).and_modify(|v| v.1.push(i));
+        for j in 0..gates.len() {
+            if i == j {
+                continue;
+            }
+            if gates[i].input1 == gates[j].output || gates[i].input2 == gates[j].output {
+                gates[i].prev.push(j);
+                gates[j].next.push(i);
             }
         }
     }
-    conn
 }
 
-fn attribute_depth(
-    gates: &mut Vec<Gate>, conn: &HashMap<usize,(Vec<usize>,Vec<usize>)>, indices: &Vec<usize>, depth: usize
-) {
-    for ig in indices.iter() {
-        gates[*ig].depth = depth;
-        let next = conn.get(ig).unwrap().1.clone();
-        attribute_depth(gates, conn, &next, depth + 1);
-    }
-}
 
 fn solve_gates(gates: &Vec<Gate>, wire_values: &mut HashMap<String,Option<u8>>) -> bool{
     let n_wires = wire_values.len();
@@ -102,8 +92,7 @@ fn solve_gates(gates: &Vec<Gate>, wire_values: &mut HashMap<String,Option<u8>>) 
 }
 
 fn recompute_gates(
-    gates: &Vec<Gate>, wire_values: &mut HashMap<String,Option<u8>>,
-    connectivity: &HashMap<usize,(Vec<usize>,Vec<usize>)>, next: &Vec<usize>
+    gates: &Vec<Gate>, wire_values: &mut HashMap<String,Option<u8>>, next: &Vec<usize>
 ) {
     for i in next.iter() {
         let gate = &gates[*i];
@@ -116,27 +105,24 @@ fn recompute_gates(
                 Operation::XOR => Some(v1 ^ v2),
             };
         });
-        let c = connectivity.get(i).unwrap();
-        recompute_gates(gates, wire_values, connectivity, &c.1);
+        let out_gates = &gates[*i].next;
+        recompute_gates(gates, wire_values, out_gates);
     }
 }
 
 fn find_upstream_gates(
-    gates: &Vec<Gate>, wire: &String, wire_values: &HashMap<String,Option<u8>>,
-    bad_bits: &Vec<String>, connectivity: &HashMap<usize,(Vec<usize>,Vec<usize>)>,
+    gates: &Vec<Gate>, wire: &String, wire_values: &HashMap<String,Option<u8>>, bad_bits: &Vec<String>,
     to_one: &mut HashMap<usize,Vec<String>>, to_zero: &mut HashMap<usize,Vec<String>>
 ) {
     let index = gates.iter().position(|g| g.output == *wire).unwrap();
     let mut gate_ids = HashSet::<usize>::new();
     gate_ids.insert(index);
-    let conn = connectivity.get(&index).unwrap();
-    let mut previous = conn.0.clone();
+    let mut previous = gates[index].prev.clone();
     while previous.len() > 0 {
         let mut next = Vec::<usize>::new();
         for p in previous.iter() {
             gate_ids.insert(*p);
-            let c = connectivity.get(p).unwrap();
-            next.extend(c.0.clone());
+            next.extend(gates[*p].prev.clone());
         }
         previous = next.clone();
     }
@@ -146,8 +132,8 @@ fn find_upstream_gates(
         let value = new_values.get(&output_tag).unwrap().unwrap();
         let iszero = value == 0;
         new_values.entry(output_tag).and_modify(|v| *v = Some(if iszero {1} else {0}));
-        let next = connectivity.get(start_gate).unwrap();
-        recompute_gates(gates, &mut new_values, connectivity, &next.1);
+        let next = &gates[*start_gate].next;
+        recompute_gates(gates, &mut new_values, next);
         let mut ok = true;
         let mut changed = Vec::<String>::new();
         for (tag, value) in new_values.iter() {
@@ -297,7 +283,8 @@ fn main() {
                 input1: parts[0].to_string(),
                 input2: parts[2].to_string(),
                 output: parts[4].to_string(),
-                depth: 0,
+                prev: Vec::<usize>::new(),
+                next: Vec::<usize>::new()
             };
             let wires = vec![gate.input1.clone(), gate.input2.clone(), gate.output.clone()];
             for wire in wires {
@@ -309,14 +296,7 @@ fn main() {
             gates.push(gate);
         }
     }
-    let connectivity = build_connectivity(&gates);
-    let mut indx0 = Vec::<usize>::new();
-    for (i,c) in connectivity.iter() {
-        if c.0.len() == 0 {
-            indx0.push(*i);
-        }
-    }
-    attribute_depth(&mut gates, &connectivity, &indx0, 0);
+    build_connectivity(&mut gates);
     let mut z_wires = wire_values.keys().filter(|k| k.starts_with('z')).map(|v| v.clone()).collect::<Vec<String>>();
     z_wires.sort();
     let initial_state = wire_values.clone();
@@ -329,14 +309,11 @@ fn main() {
     let mut to_one = HashMap::<usize,Vec<String>>::new();
     let mut to_zero = HashMap::<usize,Vec<String>>::new();
     for wire in bad_bits.iter() {
-        find_upstream_gates(&gates, wire, &mut wire_values, &bad_bits, &connectivity, &mut to_one, &mut to_zero);
+        find_upstream_gates(&gates, wire, &mut wire_values, &bad_bits, &mut to_one, &mut to_zero);
     }
     let mut saves = HashMap::<(usize,usize),Vec<String>>::new();
     for (indx_left,_) in to_one.iter() {
         for (indx_right,_) in to_zero.iter() {
-            if gates[*indx_left].depth != gates[*indx_right].depth {
-                continue;
-            }
             switch_outputs(&mut gates, *indx_left, *indx_right);
             let mut wire_values = initial_state.clone();
             let solved = solve_gates(&gates, &mut wire_values);
@@ -379,24 +356,4 @@ fn main() {
         &gates, &initial_state, &z_wires, expected, &mut results
     );
     println!("{} solutions found", results.len());
-    for seq in results.iter() {
-        let outputs = seq.split(",").collect::<Vec<&str>>();
-        let mut ok = true;
-        for output in outputs {
-            let mut depth = 0;
-            for gate in gates.iter() {
-                if gate.output == output {
-                    depth = gate.depth;
-                    break;
-                }
-            }
-            if depth > 0 {
-                ok = false;
-                break;
-            }
-        }
-        if ok {
-            println!("Switch sequence: {}", seq);
-        }
-    }
 }
