@@ -12,6 +12,11 @@ enum Operation {
     XOR,
 }
 
+struct Swaps {
+    swaps: Vec<(usize,usize)>,
+    impact: Vec<String>
+}
+
 #[derive(Debug,Clone)]
 struct Gate {
     operation: Operation,
@@ -45,7 +50,6 @@ fn swap_outputs(gates: &mut Vec<Gate>, index1: usize, index2: usize) {
     gates[index2].output = tmp;
 }
 
-
 fn random_initialization(wire_values: &mut HashMap<String,Option<u8>>) -> (u64,u64) {
     let mut x: u64 = 0;
     let mut y: u64 = 0;
@@ -62,6 +66,7 @@ fn random_initialization(wire_values: &mut HashMap<String,Option<u8>>) -> (u64,u
     }
     (x,y)
 }
+
 
 fn build_connectivity(gates: &mut Vec<Gate>) {
     for i in 0..gates.len() {
@@ -153,8 +158,8 @@ fn recompute_gates(
 }
 
 fn find_upstream_gates(
-    gates: &Vec<Gate>, wire: &String, wire_values: &HashMap<String,Option<u8>>, bad_bits: &Vec<String>,
-    to_one: &mut HashMap<usize,Vec<String>>, to_zero: &mut HashMap<usize,Vec<String>>
+    gates: &Vec<Gate>, wire: &String, wire_values: &HashMap<String,Option<u8>>, expected: u64,
+    to_one: &mut HashSet<usize>, to_zero: &mut HashSet<usize>
 ) {
     let index = gates.iter().position(|g| g.output == *wire).unwrap();
     let mut gate_ids = HashSet::<usize>::new();
@@ -176,106 +181,100 @@ fn find_upstream_gates(
         new_values.entry(output_tag).and_modify(|v| *v = Some(if iszero {1} else {0}));
         let next = &gates[*start_gate].next;
         recompute_gates(gates, &mut new_values, next);
+        let bits = get_impacted(gates, *start_gate);
+        let bad_bits = check_results(&new_values, expected);
         let mut ok = true;
-        let mut changed = Vec::<String>::new();
-        for (tag, value) in new_values.iter() {
-            if !tag.starts_with('z') {
-                continue;
-            }
-            if wire_values[tag].unwrap() != value.unwrap() {
-                if !bad_bits.contains(tag) {
-                    ok = false;
-                    break;
-                }
-                changed.push(tag.clone());
+        for bit in bad_bits.iter() {
+            if bits.contains(bit) {
+                ok = false;
+                break;
             }
         }
-        if !ok || changed.len() == 0 {
-            continue;
+        if !ok {
+            continue
         }
         if iszero {
-            let taglist = to_one.entry(*start_gate).or_insert(Vec::<String>::new());
-            for tag in changed.iter() {
-                if !taglist.contains(tag) {
-                    taglist.push(tag.clone());
-                }
-            }
+            to_one.insert(*start_gate);
         }
         else {
-            let taglist = to_zero.entry(*start_gate).or_insert(Vec::<String>::new());
-            for tag in changed.iter() {
-                if !taglist.contains(tag) {
-                    taglist.push(tag.clone());
-                }
-            }
+            to_zero.insert(*start_gate);
         }
     }
 }
 
-fn find_swaps(
-    gates: &Vec<Gate>, state0: &HashMap<String,Option<u8>>, swaps: &Vec<(usize,usize)>,
-    impacted: &Vec<Vec<String>>, index: usize, accum: Vec<(usize,usize)>, bits: Vec<String>
-) -> Option<Vec<(usize,usize)>>{
-    if accum.len() == 4 {
-        let mut wire_values = state0.clone();
-        let mut gates_ = gates.clone();
-        for (l,r) in accum.iter() {
-            swap_outputs(&mut gates_, *l, *r);
-        }
-        let mut ok = true;
-        for _ in 0..100 {
-            let (x,y) = random_initialization(&mut wire_values);
-            let expected = x+y;
-            let sol = solve_gates(&gates_, &mut wire_values);
-            if !sol {
-                ok = false;
-                break;
-            }
-            let bad_bits = check_results(&wire_values, expected);
-            if bad_bits.len()  > 0{
-                ok = false;
-                break
-            }
-        }
-        return if ok {Some(accum)} else {None};
+fn test_swaps(gates: &Vec<Gate>, state0: &HashMap<String,Option<u8>>, swaps: &Swaps, n_try: usize) -> Option<usize> {
+    let mut gate_ = gates.clone();
+    let mut n_correct: usize = 0;
+    for (l,r) in swaps.swaps.iter() {
+        swap_outputs(&mut gate_, *l, *r);
     }
-    for i in index..swaps.len() {
-        let (l,r) = swaps.get(i).unwrap();
-        let mut touched = false;
-        for sw in accum.iter() {
-            if *l == sw.0 || *l == sw.1 || *r == sw.0 || *r == sw.1 {
-                touched = true;
-                break;
+    for _ in 0..n_try {
+        let mut wire_values = state0.clone();
+        let (x,y) = random_initialization(&mut wire_values);
+        let solved = solve_gates(&gate_, &mut wire_values);
+        if !solved {
+            return None;
+        }
+        let bad = check_results(&wire_values, x+y);
+        if bad.len() == 0 {
+            n_correct += 1;
+        }
+        for bit in bad.iter() {
+            if swaps.impact.contains(bit) {
+                return None;
             }
         }
-        if touched {
-            continue
-        }
-        let mut skip = false;
-        let mut bits_ = bits.clone();
-        for bit in impacted[*l].iter() {
-            if bits.contains(bit) {
-                skip = true;
-                break
+    }
+    Some(n_correct)
+}
+
+fn combine_swaps(swaps1: &Swaps, swaps2: &Swaps, gates: &Vec<Gate>, state0: &HashMap<String,Option<u8>>) -> Option<Swaps> {
+    for (l1,r1) in swaps1.swaps.iter() {
+        for (l2,r2) in swaps2.swaps.iter() {
+            if *l1 == *l2 || *r1 == *r2 || *l1 == *r2 || *r1 == *l2 {
+                return None;
             }
-            bits_.push(bit.clone());
         }
-        for bit in impacted[*r].iter() {
-            if bits.contains(bit) {
-                skip = true;
-                break
+    }
+    for bit in swaps1.impact.iter() {
+        if swaps2.impact.contains(bit) {
+            return None;
+        }
+    }
+    let mut swaps_ = swaps1.swaps.clone();
+    swaps_.extend(swaps2.swaps.clone());
+    let mut impact = swaps1.impact.clone();
+    impact.extend(swaps2.impact.clone());
+    let swaps_test = Swaps{swaps: swaps_, impact};
+    let n_correct = test_swaps(gates, state0, &swaps_test, 10);
+    match n_correct {
+        Some(_) => Some(swaps_test),
+        None => None
+    }
+}
+
+fn find_swaps(
+    swaps: &Vec<Swaps>, gates: &Vec<Gate>, state0: &HashMap<String,Option<u8>>,
+) -> Option<Vec<(usize,usize)>>{
+    for i in 0..swaps.len()-1 {
+        for j in i+1..swaps.len() {
+            let combined = combine_swaps(&swaps[i], &swaps[j], &gates, &state0);
+            match combined {
+                Some(sw) => {
+                    match test_swaps(&gates, &state0, &sw, 50)  {
+                        Some(v) => {
+                            if v == 50 {
+                                return Some(sw.swaps);
+                            }
+                            else {
+                                continue
+                            }
+                        },
+                        None => continue
+                    }
+                },
+                None => continue
             }
-            bits_.push(bit.clone());
-        }
-        if skip {
-            continue
-        }
-        let mut swaps_ = accum.clone();
-        swaps_.push((*l,*r));
-        let sol = find_swaps(gates, state0, swaps, impacted, i, swaps_, bits_);
-        match sol {
-            Some(v) => return Some(v),
-            None => continue
         }
     }
     None
@@ -348,72 +347,69 @@ fn main() {
     let result = eval_sol(&wire_values);
     println!("Result: {}", result);
     // Part 2
-    let mut swaps = Vec::<(usize,usize)>::new();
+    let mut swaps = Vec::<Swaps>::new();
     let mut tested = Vec::<(usize,usize)>::new();
-    for _ in 0..100 {
+    for itest in 0..1 {
         let (x,y) = random_initialization(&mut wire_values);
         let expected = x + y;
         solve_gates(&gates, &mut wire_values);
         let bad_bits = check_results(&wire_values, expected);
-        let mut to_one = HashMap::<usize,Vec<String>>::new();
-        let mut to_zero = HashMap::<usize,Vec<String>>::new();
+        let mut to_one = HashSet::<usize>::new();
+        let mut to_zero = HashSet::<usize>::new();
         for wire in bad_bits.iter() {
-            find_upstream_gates(&gates, wire, &mut wire_values, &bad_bits, &mut to_one, &mut to_zero);
+            find_upstream_gates(&gates, wire, &mut wire_values, expected, &mut to_one, &mut to_zero);
         }
-        for (i,_) in to_one.iter() {
-            for (j,_) in to_zero.iter() {
+        for i in to_one.iter() {
+            for j in to_zero.iter() {
                 let swap = (min(*i,*j), max(*i,*j));
                 if tested.contains(&swap) {
                     continue
                 }
                 tested.push(swap);
-                let mut bits = Vec::<String>::new();
-                for bit in zbits[*i].iter() {
-                    if !bits.contains(bit) {
-                        bits.push(bit.clone())
-                    }
-                }
-                for bit in zbits[*j].iter() {
-                    if !bits.contains(bit) {
-                        bits.push(bit.clone());
-                    }
-                }
-                swap_outputs(&mut gates, *i, *j);
+                let mut bits = zbits[*i].clone();
                 let mut ok = true;
-                for _ in 0..100 {
-                //wire_values = state0.clone();
-                    wire_values = initial_state.clone();
-                    let (x,y) = random_initialization(&mut wire_values);
-                    let expected = x+y;
-                    let solved = solve_gates(&gates, &mut wire_values);
-                    if !solved {
+                for bit in zbits[*j].iter() {
+                    if bits.contains(bit) {
                         ok = false;
                         break;
                     }
-                    let bad_ = check_results(&wire_values, expected);
-                    for bit in bad_.iter() {
-                        if bits.contains(bit) {
-                            ok = false;
-                            break;
-                        }
-                    }
-                    if !ok {
-                        break
-                    }
                 }
-                swap_outputs(&mut gates, *i, *j);
-                if ok {
-                    swaps.push(swap);
+                if !ok {
+                    continue
+                }
+                bits.extend(zbits[*j].clone());
+                let swap_object = Swaps{swaps: vec![swap], impact: bits.clone()};
+                let ok = test_swaps(&gates, &initial_state, &swap_object, 20);
+                match ok {
+                    Some(_) => swaps.push(swap_object),
+                    None => continue
                 }
             }
         }
     }
-    println!("{} swaps candidates", swaps.len());
-    let solution = find_swaps(
-        &gates, &initial_state, &swaps, &zbits, 0, Vec::<(usize,usize)>::new(), Vec::<String>::new()
-    );
-    match solution {
-        Some(v) => println!("{:?}", v),
-        None => println!("Couille in the potage :("),
+    let mut swap_pairs = Vec::<Swaps>::new();
+    println!("{} swaps", swaps.len());
+    for i in 0..swaps.len()-1{
+        println!("{}/{}", i+1, swaps.len());
+        for j in i+1..swaps.len() {
+            let swap = combine_swaps(&swaps[i], &swaps[j], &gates, &initial_state);
+            match swap {
+                Some(v) => swap_pairs.push(v),
+                None => continue
+            }
+        }
+    }
+    println!("{} swap pairs", swap_pairs.len());
+    let solution = find_swaps(&swap_pairs, &gates, &initial_state);
+    let solvalue = match solution {
+        Some(v) => v,
+        None => panic!("No solution found"),
     };
+    let mut names = Vec::<&str>::new();
+    for (l,r) in solvalue.iter() {
+        names.push(&gates[*l].output);
+        names.push(&gates[*r].output);
+    }
+    names.sort();
+    println!("{}", names.join(","));
 }
