@@ -1,7 +1,9 @@
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::collections::{HashMap,HashSet};
+use std::cmp::{min,max};
 use std::env;
+use rand::Rng;
 
 #[derive(Debug,Clone)]
 enum Operation {
@@ -24,10 +26,11 @@ fn get_kth_bit(n: u64, k: usize) -> u8 {
     ((n >> k) & 1) as u8
 }
 
-fn eval_sol(wire_values: &HashMap<String,Option<u8>>, z_wires: &Vec<String>) -> u64 {
+fn eval_sol(wire_values: &HashMap<String,Option<u8>>) -> u64 {
     let mut result: u64 = 0;
-    for (i,wire) in z_wires.iter().enumerate() {
-        let value = match wire_values.get(wire).unwrap() {
+    for i in 0..46 {
+        let wire = format!("z{:02}", i);
+        let value = match wire_values.get(&wire).unwrap() {
             Some(v) => *v,
             None => panic!("Wire {} not solved", wire),
         };
@@ -36,10 +39,28 @@ fn eval_sol(wire_values: &HashMap<String,Option<u8>>, z_wires: &Vec<String>) -> 
     result
 }
 
-fn switch_outputs(gates: &mut Vec<Gate>, index1: usize, index2: usize) {
+fn swap_outputs(gates: &mut Vec<Gate>, index1: usize, index2: usize) {
     let tmp = gates[index1].output.clone();
     gates[index1].output = gates[index2].output.clone();
     gates[index2].output = tmp;
+}
+
+
+fn random_initialization(wire_values: &mut HashMap<String,Option<u8>>) -> (u64,u64) {
+    let mut x: u64 = 0;
+    let mut y: u64 = 0;
+    for i in 0..45 {
+        let mut rng = rand::thread_rng();
+        let xvar = format!("x{:02}", i);
+        let yvar = format!("y{:02}", i);
+        let xvalue = if rng.gen::<f64>() > 0.5 {1} else {0};
+        let yvalue = if rng.gen::<f64>() > 0.5 {1} else {0};
+        x += (xvalue as u64) << i;
+        y += (yvalue as u64) << i;
+        wire_values.get_mut(&xvar).map(|v| *v = Some(xvalue));
+        wire_values.get_mut(&yvar).map(|v| *v = Some(yvalue));
+    }
+    (x,y)
 }
 
 fn build_connectivity(gates: &mut Vec<Gate>) {
@@ -56,6 +77,27 @@ fn build_connectivity(gates: &mut Vec<Gate>) {
     }
 }
 
+fn get_impacted(gates: &Vec<Gate>, gate_indx: usize) -> Vec<String> {
+    let mut next = gates[gate_indx].next.clone();
+    let mut bits = Vec::<String>::new();
+    while next.len() > 0 {
+        let mut next_ = Vec::<usize>::new();
+        for ig in next.iter() {
+            let gate = &gates[*ig];
+            if gate.next.len() > 0 {
+                next_.extend(gate.next.clone());
+            }
+            else if gate.output.starts_with('z') {
+                let bit = gate.output.to_string().clone();
+                if !bits.contains(&bit) {
+                    bits.push(bit)
+                }
+            }
+        }
+        next = next_;
+    }
+    bits
+}
 
 fn solve_gates(gates: &Vec<Gate>, wire_values: &mut HashMap<String,Option<u8>>) -> bool{
     let n_wires = wire_values.len();
@@ -170,72 +212,84 @@ fn find_upstream_gates(
     }
 }
 
-fn find_switches(
-    saves: &HashMap<(usize,usize),Vec<String>>, start_index: i32, left: Vec<usize>, right: Vec<usize>,
-    fixed_bits: Vec<String>, gates: &Vec<Gate>, initial_state: &HashMap<String,Option<u8>>,
-    z_wires: &Vec<String>, expected: u64, results: &mut HashSet<String>
-) {
-    if left.len() == 4 {
-        if fixed_bits.len() == 14 {
-            let result: Vec<(usize,usize)> = (0..4).map(|i| (left[i],right[i])).collect();
-            let mut test_gates = gates.clone();
-            for (l,r) in result.iter() {
-                switch_outputs(&mut test_gates, *l, *r);
-            }
-            let mut wire_values = initial_state.clone();
-            solve_gates(&test_gates, &mut wire_values);
-            let bad_bits = check_results(&wire_values, z_wires, expected);
-            if bad_bits.len() > 0 {
-                return;
-            }
-            let mut switches = Vec::<&str>::new();
-            for (l,r) in result.iter() {
-                switches.push(gates[*l].output.as_str());
-                switches.push(gates[*r].output.as_str());
-            }
-            switches.sort();
-            results.insert(switches.join(","));
+fn find_swaps(
+    gates: &Vec<Gate>, state0: &HashMap<String,Option<u8>>, swaps: &Vec<(usize,usize)>,
+    impacted: &Vec<Vec<String>>, index: usize, accum: Vec<(usize,usize)>, bits: Vec<String>
+) -> Option<Vec<(usize,usize)>>{
+    if accum.len() == 4 {
+        let mut wire_values = state0.clone();
+        let mut gates_ = gates.clone();
+        for (l,r) in accum.iter() {
+            swap_outputs(&mut gates_, *l, *r);
         }
-        return
+        let mut ok = true;
+        for _ in 0..100 {
+            let (x,y) = random_initialization(&mut wire_values);
+            let expected = x+y;
+            let sol = solve_gates(&gates_, &mut wire_values);
+            if !sol {
+                ok = false;
+                break;
+            }
+            let bad_bits = check_results(&wire_values, expected);
+            if bad_bits.len()  > 0{
+                ok = false;
+                break
+            }
+        }
+        return if ok {Some(accum)} else {None};
     }
-    let mut index: i32 = -1;
-    for (pair,saved) in saves.iter() {
-        index += 1;
-        if index < start_index {
-            continue;
-        }
-        let (lhs, rhs) = pair;
-        if left.contains(lhs) || right.contains(rhs) {
-            continue;
-        }
-        let mut add = true;
-        for bit in saved.iter() {
-            if fixed_bits.contains(bit) {
-                add = false;
+    for i in index..swaps.len() {
+        let (l,r) = swaps.get(i).unwrap();
+        let mut touched = false;
+        for sw in accum.iter() {
+            if *l == sw.0 || *l == sw.1 || *r == sw.0 || *r == sw.1 {
+                touched = true;
                 break;
             }
         }
-        if !add {
-            continue;
+        if touched {
+            continue
         }
-        let mut fixed = fixed_bits.clone();
-        fixed.extend(saved.clone());
-        let mut left_ = left.clone();
-        left_.push(*lhs);
-        let mut right_ = right.clone();
-        right_.push(*rhs);
-        find_switches(saves, index, left_, right_, fixed, gates, initial_state, z_wires, expected, results);
+        let mut skip = false;
+        let mut bits_ = bits.clone();
+        for bit in impacted[*l].iter() {
+            if bits.contains(bit) {
+                skip = true;
+                break
+            }
+            bits_.push(bit.clone());
+        }
+        for bit in impacted[*r].iter() {
+            if bits.contains(bit) {
+                skip = true;
+                break
+            }
+            bits_.push(bit.clone());
+        }
+        if skip {
+            continue
+        }
+        let mut swaps_ = accum.clone();
+        swaps_.push((*l,*r));
+        let sol = find_swaps(gates, state0, swaps, impacted, i, swaps_, bits_);
+        match sol {
+            Some(v) => return Some(v),
+            None => continue
+        }
     }
+    None
 }
 
-fn check_results(wire_values: &HashMap<String,Option<u8>>, z_wires: &Vec<String>, expected: u64) -> Vec<String> {
+fn check_results(wire_values: &HashMap<String,Option<u8>>, expected: u64) -> Vec<String> {
     let mut bad = Vec::<String>::new();
-    for (i,wire) in z_wires.iter().enumerate() {
-        let value = wire_values.get(wire).unwrap().unwrap();
-        if value == get_kth_bit(expected, i) {
-            continue;
+    for i in 0..46 {
+        let bitname = format!("z{:02}", i);
+        let bitvalue = wire_values.get(&bitname).unwrap().unwrap();
+        if bitvalue == get_kth_bit(expected, i) {
+            continue
         }
-        bad.push(wire.clone());
+        bad.push(bitname.clone());
     }
     bad
 }
@@ -247,10 +301,6 @@ fn main() {
     let mut wire_values = HashMap::<String,Option<u8>>::new();
     let mut gates = Vec::<Gate>::new();
     let mut zwires = Vec::<String>::new();
-    let mut x: u64 = 0;
-    let mut ix = 0;
-    let mut y: u64 = 0;
-    let mut iy = 0;
     for line in reader.lines() {
         let line = line.unwrap();
         if line.len() == 0 {
@@ -261,14 +311,6 @@ fn main() {
             let name = parts[0];
             let value = parts[1].parse::<u8>().unwrap();
             wire_values.insert(name.to_string(), Some(value));
-            if name.starts_with('x') {
-                x += (value as u64) << ix;
-                ix += 1;
-            }
-            else {
-                y += (value as u64) << iy;
-                iy += 1;
-            }
         }
         else {
             let parts = line.split_whitespace().collect::<Vec<&str>>();
@@ -297,63 +339,81 @@ fn main() {
         }
     }
     build_connectivity(&mut gates);
-    let mut z_wires = wire_values.keys().filter(|k| k.starts_with('z')).map(|v| v.clone()).collect::<Vec<String>>();
-    z_wires.sort();
+    let mut zbits = Vec::<Vec<String>>::new();
+    for i in 0..gates.len() {
+        zbits.push(get_impacted(&gates, i));
+    }
     let initial_state = wire_values.clone();
     solve_gates(&gates, &mut wire_values);
-    let expected = x + y;
-    let result = eval_sol(&wire_values, &z_wires);
+    let result = eval_sol(&wire_values);
     println!("Result: {}", result);
     // Part 2
-    let bad_bits = check_results(&wire_values, &z_wires, expected);
-    let mut to_one = HashMap::<usize,Vec<String>>::new();
-    let mut to_zero = HashMap::<usize,Vec<String>>::new();
-    for wire in bad_bits.iter() {
-        find_upstream_gates(&gates, wire, &mut wire_values, &bad_bits, &mut to_one, &mut to_zero);
-    }
-    let mut saves = HashMap::<(usize,usize),Vec<String>>::new();
-    for (indx_left,_) in to_one.iter() {
-        for (indx_right,_) in to_zero.iter() {
-            switch_outputs(&mut gates, *indx_left, *indx_right);
-            let mut wire_values = initial_state.clone();
-            let solved = solve_gates(&gates, &mut wire_values);
-            switch_outputs(&mut gates, *indx_left, *indx_right);
-            if !solved {
-                continue;
-            }
-            let new_bad = check_results(&wire_values, &z_wires, expected);
-            // If more broken bits or no save, skip
-            if new_bad.len() >= bad_bits.len() {
-                continue
-            }
-            let mut ok = true;
-            // If any of the new broken bits are not in the original set, skip
-            for wire in new_bad.iter() {
-                if !bad_bits.contains(wire) {
-                    ok = false;
-                    break;
+    let mut swaps = Vec::<(usize,usize)>::new();
+    let mut tested = Vec::<(usize,usize)>::new();
+    for _ in 0..100 {
+        let (x,y) = random_initialization(&mut wire_values);
+        let expected = x + y;
+        solve_gates(&gates, &mut wire_values);
+        let bad_bits = check_results(&wire_values, expected);
+        let mut to_one = HashMap::<usize,Vec<String>>::new();
+        let mut to_zero = HashMap::<usize,Vec<String>>::new();
+        for wire in bad_bits.iter() {
+            find_upstream_gates(&gates, wire, &mut wire_values, &bad_bits, &mut to_one, &mut to_zero);
+        }
+        for (i,_) in to_one.iter() {
+            for (j,_) in to_zero.iter() {
+                let swap = (min(*i,*j), max(*i,*j));
+                if tested.contains(&swap) {
+                    continue
                 }
-            }
-            if !ok {
-                continue
-            }
-            let mut saved_bits = Vec::<String>::new();
-            for wire in bad_bits.iter() {
-                if !new_bad.contains(wire) {
-                    saved_bits.push(wire.clone());
+                tested.push(swap);
+                let mut bits = Vec::<String>::new();
+                for bit in zbits[*i].iter() {
+                    if !bits.contains(bit) {
+                        bits.push(bit.clone())
+                    }
                 }
-            }
-            if ok {
-                //println!("({} {}) -> {:?}", indx_left, indx_right, saved_bits);
-                saves.insert((*indx_left,*indx_right), saved_bits);
+                for bit in zbits[*j].iter() {
+                    if !bits.contains(bit) {
+                        bits.push(bit.clone());
+                    }
+                }
+                swap_outputs(&mut gates, *i, *j);
+                let mut ok = true;
+                for _ in 0..100 {
+                //wire_values = state0.clone();
+                    wire_values = initial_state.clone();
+                    let (x,y) = random_initialization(&mut wire_values);
+                    let expected = x+y;
+                    let solved = solve_gates(&gates, &mut wire_values);
+                    if !solved {
+                        ok = false;
+                        break;
+                    }
+                    let bad_ = check_results(&wire_values, expected);
+                    for bit in bad_.iter() {
+                        if bits.contains(bit) {
+                            ok = false;
+                            break;
+                        }
+                    }
+                    if !ok {
+                        break
+                    }
+                }
+                swap_outputs(&mut gates, *i, *j);
+                if ok {
+                    swaps.push(swap);
+                }
             }
         }
     }
-    println!("{} possible swaps found", saves.len());
-    let mut results = HashSet::<String>::new();
-    find_switches(
-        &saves, 0, Vec::<usize>::new(), Vec::<usize>::new(), Vec::<String>::new(),
-        &gates, &initial_state, &z_wires, expected, &mut results
+    println!("{} swaps candidates", swaps.len());
+    let solution = find_swaps(
+        &gates, &initial_state, &swaps, &zbits, 0, Vec::<(usize,usize)>::new(), Vec::<String>::new()
     );
-    println!("{} solutions found", results.len());
+    match solution {
+        Some(v) => println!("{:?}", v),
+        None => println!("Couille in the potage :("),
+    };
 }
