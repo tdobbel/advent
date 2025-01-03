@@ -67,7 +67,6 @@ fn random_initialization(wire_values: &mut HashMap<String,Option<u8>>) -> (u64,u
     (x,y)
 }
 
-
 fn build_connectivity(gates: &mut Vec<Gate>) {
     for i in 0..gates.len() {
         for j in 0..gates.len() {
