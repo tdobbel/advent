@@ -5,13 +5,15 @@ total2=0
 
 while read -r line; do
     read -a numbers <<< "$line"
-    pred=0
-    firstvalues=()
+    prev=0
+    next=0
+    factor=1
     while true; do
        n=${#numbers[@]}
        new_values=()
-       pred=$((pred+numbers[n-1]))
-       firstvalues+=(${numbers[0]})
+       next=$((next+numbers[n-1]))
+       prev=$((prev+factor*numbers[0]))
+       factor=$((factor*(-1)))
        stop=true
        for (( i=0; i<n-1; i++ )); do
            diff=$((numbers[i+1] - numbers[i]))
@@ -25,13 +27,8 @@ while read -r line; do
        fi
        numbers=("${new_values[@]}")
     done
-    total1=$((total1+pred))
-    n=${#firstvalues[@]}
-    pred=0
-    for ((i=n-1; i >= 0; i--)); do
-        pred=$((firstvalues[i]-pred))
-    done
-    total2=$((total2+pred))
+    total1=$((total1+next))
+    total2=$((total2+prev))
 done
 
 echo "Part 1: $total1"
