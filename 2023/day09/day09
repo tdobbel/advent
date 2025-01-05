@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+
+total1=0
+total2=0
+
+while read -r line; do
+    read -a numbers <<< "$line"
+    pred=0
+    firstvalues=()
+    while true; do
+       n=${#numbers[@]}
+       new_values=()
+       pred=$((pred+numbers[n-1]))
+       firstvalues+=(${numbers[0]})
+       stop=true
+       for (( i=0; i<n-1; i++ )); do
+           diff=$((numbers[i+1] - numbers[i]))
+           new_values+=($diff)
+           if (( diff != 0 )); then
+               stop=false
+           fi
+       done
+       if [[ $stop == true ]]; then
+           break
+       fi
+       numbers=("${new_values[@]}")
+    done
+    total1=$((total1+pred))
+    n=${#firstvalues[@]}
+    pred=0
+    for ((i=n-1; i >= 0; i--)); do
+        pred=$((firstvalues[i]-pred))
+    done
+    total2=$((total2+pred))
+done
+
+echo "Part 1: $total1"
+echo "Part 2: $total2"
