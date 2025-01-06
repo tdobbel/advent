@@ -42,8 +42,7 @@ fn get_all_paths(
 }
 
 fn get_all_num_paths(line: &str, num_keypad: &HashMap<char,(i32,i32)>) -> Vec<String> {
-    let mut seqs = Vec::<String>::new();
-    seqs.push(String::new());
+    let mut seqs = vec![String::new()];
     let nogo = (3,0);
     let mut pos = (3,2);
     for key in line.chars() {
