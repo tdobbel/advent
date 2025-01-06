@@ -1,6 +1,9 @@
+use std::env;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::collections::HashMap;
+
+use anyhow::Error as E;
 
 #[derive(PartialEq, Clone, Debug)]
 enum Orientation {
@@ -63,8 +66,9 @@ fn move_guard(
     (visited, looping)
 }
 
-fn main() {
-    let file = File::open("input").unwrap();
+fn main() -> Result<(), E> {
+    let args = env::args().nth(1).expect("Please provide an input file");
+    let file = File::open(args)?;
     let reader = BufReader::new(file);
     let mut obstacles = HashMap::<(usize, usize), bool>::new();
     let mut xmax: i32 = 0;
@@ -111,4 +115,5 @@ fn main() {
         obstacles.remove(&pos);
     }
     println!("{} possible positions for obstacle", total);
+    Ok(())
 }
