@@ -23,10 +23,10 @@ fn direction_from(dx: i32, dy: i32) -> Direction {
 
 fn run_loop(
     grid: &HashMap<(i32,i32),char>, pipes: &HashMap<char,(Direction,Direction)>, nx: i32, ny: i32, start: &(i32,i32)
-) -> usize {
+) -> Vec<(i32,i32)> {
     let mut prev = (start.0, start.1);
     let mut pos = (0, 0);
-    let mut n = 1;
+    let mut path = vec![(start.0,start.1)];
     let mut ok = false;
     for (dx,dy) in [(-1,0), (0,-1), (1,0), (0,1)].iter() {
         let x = prev.0 + dx;
@@ -51,6 +51,7 @@ fn run_loop(
         panic!("Could no start loop :(");
     }
     while pos.0 != start.0 || pos.1 != start.1 {
+        path.push((pos.0,pos.1));
         let dx = pos.0-prev.0;
         let dy = pos.1-prev.1;
         let dfrom = direction_from(dx, dy);
@@ -74,9 +75,8 @@ fn run_loop(
         };
         prev = pos;
         pos = (prev.0+dx, prev.1+dy);
-        n += 1;
     } 
-    n
+    path
 }
 
 fn main() {
@@ -106,7 +106,41 @@ fn main() {
             }
         }
     }
-    let loop_size = run_loop(&grid, &pipes, nx, ny, &start);
-    println!("{}", loop_size / 2);
+    let path = run_loop(&grid, &pipes, nx, ny, &start);
+    let clockwise = (0..path.len()-1).map(|i| {
+        let x = path[i];
+        let y = path[i+1];
+        return (y.0-x.0)*(y.1-x.1)
+    }).sum::<i32>() > 0;
+    let n = path.len();
+    let mut n_enclosed = 0;
+    for y in 0..ny {
+        let mut enclosed = false;
+        for x in 0..nx {
+            let pos = (x,y);
+            let index = path.iter().position(|&x| x.0 == pos.0 && x.1 == pos.1);
+            match index {
+                Some(i) => {
+                    let prev = if i == 0 {n-1} else {i-1};
+                    let next = (i+1)%n;
+                    for (i_,j_) in [(prev,i), (i, next)].iter() {
+                        let dy = path[*j_].1-path[*i_].1;
+                        if dy == 0 {
+                            continue
+                        }
+                        enclosed = if clockwise { dy < 0 } else { dy > 0 };
+                        break
+                    }
+                },
+                None => {
+                    if enclosed {
+                        n_enclosed += 1;
+                    }
+                }
+            };
+        }
+    }
+    println!("Part 1: {}", n / 2);
+    println!("Part 2: {}", n_enclosed);
 }
 

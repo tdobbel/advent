@@ -1,6 +1,5 @@
-/target
 input
 example
-*/target/
+target
 *.lock
 main
