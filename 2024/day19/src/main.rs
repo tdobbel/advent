@@ -5,7 +5,7 @@ use std::env;
 
 #[allow(dead_code)]
 fn ispossible(design: &str, patterns: &Vec<Vec<&str>>, nmax: &usize) -> bool {
-    if design.len() == 0 {
+    if design.is_empty() {
         return true;
     }
     for n in 0..min(*nmax,design.len()) {
@@ -22,7 +22,7 @@ fn ispossible(design: &str, patterns: &Vec<Vec<&str>>, nmax: &usize) -> bool {
 
 #[allow(dead_code)]
 fn find_all_ways(design: &str, patterns: &Vec<Vec<&str>>, nmax: &usize, prev: String, ways: &mut Vec<String>) {
-    if design.len() == 0 {
+    if design.is_empty() {
         ways.push(prev);
         return
     }
@@ -30,13 +30,12 @@ fn find_all_ways(design: &str, patterns: &Vec<Vec<&str>>, nmax: &usize, prev: St
         let part = &design[..n];
         for towel in patterns[n-1].iter() {
             if part == *towel {
-                let seq: String;
-                if prev.len() == 0 {
-                    seq = towel.to_string();
+                let seq: String = if prev.is_empty(){
+                    towel.to_string()
                 }
                 else {
-                    seq = format!("{},{}", prev, towel);
-                }
+                    format!("{},{}", prev, towel)
+                };
                 find_all_ways(&design[n..], patterns, nmax, seq, ways)
             }
         }
@@ -59,7 +58,7 @@ fn ispossible_split(design: &str, patterns: &Vec<Vec<&str>>, nmax: &usize) -> bo
     false
 }
 
-fn count_possibilities(design: &str, patterns: &Vec<Vec<&str>>, nmax: &usize) -> u64 {
+fn count_possibilities(design: &str, patterns: &[Vec<&str>], nmax: &usize) -> u64 {
     let mut counter: Vec<u64> = vec![0; design.len()];
     for i in 0..design.len() {
         let stop = i+1;
@@ -98,7 +97,7 @@ fn main() {
     }
     let mut n_possible = 0;
     let mut n_ways: u64 = 0;
-    while let Some(line) = lines.next() {
+    for line in lines {
         let line = line.unwrap();
         if line.len() == 0 {
             continue;
