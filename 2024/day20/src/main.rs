@@ -22,12 +22,10 @@ fn plot_path(path: &[(i32, i32)], walls: &[(i32, i32)], nx: i32, ny: i32) {
             } else {
                 '^'
             }
-        } else {
-            if a.0 < b.0 {
+        } else if a.0 < b.0 {
                 '>'
-            } else {
-                '<'
-            }
+        } else {
+            '<'
         };
         symbols.insert(a, c);
     }

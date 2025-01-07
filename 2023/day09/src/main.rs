@@ -2,9 +2,9 @@ use std::env;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 
-fn extrapolate(numbers: &Vec<i32>) -> (i32,i32) {
+fn extrapolate(numbers: &[i32]) -> (i32,i32) {
     let mut stop = false;
-    let mut array = numbers.clone();
+    let mut array = numbers.to_owned();
     let mut past: i32 = 0;
     let mut future: i32 = 0;
     let mut factor = 1;

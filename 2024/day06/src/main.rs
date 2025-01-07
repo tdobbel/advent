@@ -3,7 +3,7 @@ use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::collections::HashMap;
 
-use anyhow::Error as E;
+use anyhow::Result;
 
 #[derive(PartialEq, Clone, Debug)]
 enum Orientation {
@@ -66,7 +66,7 @@ fn move_guard(
     (visited, looping)
 }
 
-fn main() -> Result<(), E> {
+fn main() -> Result<()> {
     let args = env::args().nth(1).expect("Please provide an input file");
     let file = File::open(args)?;
     let reader = BufReader::new(file);

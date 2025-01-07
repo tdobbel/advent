@@ -57,7 +57,6 @@ fn main() {
             }
         }
         let power = req.values().product::<usize>();
-        println!("Power: {}", power);
         power_sum += power;
         if ok {
             total += i+1;
