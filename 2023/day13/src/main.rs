@@ -4,36 +4,7 @@ use std::env;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 
-fn find_symmetry(grid: &[Vec<char>]) -> Option<usize> {
-    let mut xs: Vec<usize> = (1..grid[0].len()).collect();
-    for row in grid.iter() {
-        let mut x_next = vec![];
-        for x in xs.iter() {
-            let mut ok = true;
-            let n = min(*x, row.len() - *x);
-            for i in 0..n {
-                if row[x - i - 1] != row[x + i] {
-                    ok = false;
-                    break;
-                }
-            }
-            if ok {
-                x_next.push(*x);
-            }
-        }
-        xs = x_next;
-        if xs.is_empty() {
-            return None;
-        }
-    }
-    if xs.len() == 1 {
-        Some(xs[0])
-    } else {
-        None
-    }
-}
-
-fn find_symmetry_smudge(grid: &[Vec<char>]) -> Option<usize> {
+fn find_symmetry(grid: &[Vec<char>], target_err: usize) -> Option<usize> {
     let mut xs: Vec<usize> = (1..grid[0].len()).collect();
     let mut nwrong: HashMap<usize, usize> = HashMap::new();
     for row in grid.iter() {
@@ -45,11 +16,11 @@ fn find_symmetry_smudge(grid: &[Vec<char>]) -> Option<usize> {
                 if row[x - i - 1] != row[x + i] {
                     *nerr += 1;
                 }
-                if *nerr > 1 {
+                if *nerr > target_err {
                     break;
                 }
             }
-            if *nerr <= 1 {
+            if *nerr <= target_err {
                 x_next.push(*x);
             }
         }
@@ -59,7 +30,7 @@ fn find_symmetry_smudge(grid: &[Vec<char>]) -> Option<usize> {
         }
     }
     for (k, v) in nwrong.iter() {
-        if *v == 1 {
+        if *v == target_err {
             return Some(*k);
         }
     }
@@ -78,25 +49,12 @@ fn transpose(grid: &[Vec<char>]) -> Vec<Vec<char>> {
     new_grid
 }
 
-fn part1(grid: &[Vec<char>]) -> usize {
-    match find_symmetry(grid) {
+fn get_symmetry_value(grid: &[Vec<char>], target_err: usize) -> usize {
+    match find_symmetry(grid, target_err) {
         Some(i) => i,
         None => {
             let transposed = transpose(grid);
-            match find_symmetry(&transposed) {
-                Some(i) => i * 100,
-                None => panic!("No symmetry found"),
-            }
-        }
-    }
-}
-
-fn part2(grid: &[Vec<char>]) -> usize {
-    match find_symmetry_smudge(grid) {
-        Some(i) => i,
-        None => {
-            let transposed = transpose(grid);
-            match find_symmetry_smudge(&transposed) {
+            match find_symmetry(&transposed, target_err) {
                 Some(i) => i * 100,
                 None => panic!("No symmetry found"),
             }
@@ -114,16 +72,16 @@ fn main() {
     for line in reader.lines() {
         let line = line.unwrap();
         if line.is_empty() {
-            total1 += part1(&grid);
-            total2 += part2(&grid);
+            total1 += get_symmetry_value(&grid, 0);
+            total2 += get_symmetry_value(&grid, 1);
             grid = vec![];
             continue;
         }
         grid.push(line.chars().collect());
     }
     if !grid.is_empty() {
-        total1 += part1(&grid);
-        total2 += part2(&grid);
+        total1 += get_symmetry_value(&grid, 0);
+        total2 += get_symmetry_value(&grid, 1);
     }
     println!("Part 1: {}", total1);
     println!("Part 2: {}", total2);
