@@ -1,33 +1,13 @@
 use std::fs::File;
 use std::io::{BufRead, BufReader};
-use std::collections::{HashMap,HashSet};
-use std::cmp::{min,max};
+use std::collections::HashMap;
 use std::env;
-use rand::Rng;
 
 #[derive(Debug,Clone)]
 enum Operation {
-    AND,
-    OR,
-    XOR,
-}
-
-#[allow(dead_code)]
-fn get_kth_bit(n: u64, k: usize) -> u8 {
-    ((n >> k) & 1) as u8
-}
-
-#[allow(dead_code)]
-fn random_initialization(wire_values: &mut HashMap<String,Option<u8>>, n_input: usize) {
-    for i in 0..n_input {
-        let mut rng = rand::thread_rng();
-        let xvar = format!("x{:02}", i);
-        let yvar = format!("y{:02}", i);
-        let xvalue = if rng.gen::<f64>() > 0.5 {1} else {0};
-        let yvalue = if rng.gen::<f64>() > 0.5 {1} else {0};
-        wire_values.get_mut(&xvar).map(|v| *v = Some(xvalue));
-        wire_values.get_mut(&yvar).map(|v| *v = Some(yvalue));
-    }
+    And,
+    Or,
+    Xor,
 }
 
 fn wires_to_number(wire_values: &HashMap<String,Option<u8>>, prefix: &str, n: usize) -> u64 {
@@ -44,7 +24,7 @@ fn wires_to_number(wire_values: &HashMap<String,Option<u8>>, prefix: &str, n: us
 }
 
 fn get_upstream(wire: &str, gates: &[(String, String, Operation, String)]) -> Vec<usize> {
-    assert!(wire.starts_with("z"));
+    assert!(wire.starts_with('z'));
     let mut result = Vec::<usize>::new();
     let mut outputs: Vec<&str> = Vec::new();
     for (i,gate) in gates.iter().enumerate() {
@@ -77,15 +57,15 @@ fn solve_circuit(
     loop {
         let mut updated = false;
         for gate in gates {
-            if let Some(_) = wire_values.get(&gate.3).unwrap() {
+            if wire_values.get(&gate.3).unwrap().is_some() {
                 continue;
             }
             if let Some(v1) = wire_values.get(&gate.0).unwrap() {
                 if let Some(v2) = wire_values.get(&gate.1).unwrap() {
                     let value = match gate.2 {
-                        Operation::AND => v1 & v2,
-                        Operation::OR => v1 | v2,
-                        Operation::XOR => v1 ^ v2,
+                        Operation::And => v1 & v2,
+                        Operation::Or => v1 | v2,
+                        Operation::Xor => v1 ^ v2,
                     };
                     wire_values.insert(gate.3.clone(), Some(value));
                     updated = true;
@@ -108,13 +88,13 @@ fn main() {
     let mut gates: Vec<(String, String, Operation, String)> = Vec::new();
     for line in reader.lines() {
         let line = line.unwrap();
-        if line.len() == 0 {
+        if line.is_empty() {
             continue;
         }
         if line.contains(':') {
             let parts: Vec<&str> = line.split(": ").collect();
             let name = parts[0];
-            if name.starts_with("x") {
+            if name.starts_with('x') {
                 n_input += 1;
             }
             let value = parts[1].parse::<u8>().unwrap();
@@ -129,9 +109,9 @@ fn main() {
                 wire_values.entry(p.to_string()).or_insert(None);
             }
             let op = match parts[1] {
-                "AND" => Operation::AND,
-                "OR" => Operation::OR,
-                "XOR" => Operation::XOR,
+                "AND" => Operation::And,
+                "OR" => Operation::Or,
+                "XOR" => Operation::Xor,
                 _ => panic!("Unknown operation"),
             };
             let gate = (parts[0].to_string(), parts[2].to_string(), op, parts[4].to_string());
@@ -140,18 +120,43 @@ fn main() {
     }
     let part1 = solve_circuit(&mut wire_values, &gates, n_input);
     println!("Part 1: {}", part1);
+    let mut touched = vec![false; gates.len()];
+    let mut n_wrong = 0;
     for i in 0..n_input+1 {
         let wire = format!("z{:02}", i);
         let indx_gates = get_upstream(&wire, &gates);
-        println!("## {}:", wire);
+        let mut lines = Vec::<String>::new();
+        let mut counter: (usize, usize, usize) = (0,0,0);
         for j in indx_gates {
+            if touched[j] {
+                continue;
+            }
+            touched[j] = true;
             let op = match gates[j].2 {
-                Operation::AND => "AND",
-                Operation::OR => "OR",
-                Operation::XOR => "XOR",
+                Operation::And => {
+                    counter.0 += 1;
+                    "AND"
+                },
+                Operation::Or => {
+                    counter.1 += 1;
+                    "OR"
+                },
+                Operation::Xor => {
+                    counter.2 += 1;
+                    "XOR"
+                }
             };
-            println!("{} {} {} -> {}", gates[j].0, op, gates[j].1, gates[j].3);
+            lines.push(format!("{} {} {} -> {}", gates[j].0, op, gates[j].1, gates[j].3));
         }
-        println!();
+        let wrong = counter.0 != 2 || counter.1 != 1 || counter.2 != 2;
+        if i > 1 && i < n_input && wrong {
+            println!("Something's wrong wiith wire z{:02}", i);
+            println!("{}", lines.join("\n"));
+            println!();
+            n_wrong += 1;
+        }
+    }
+    if n_wrong == 0 {
+        println!("All good !");
     }
 }
