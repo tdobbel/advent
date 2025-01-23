@@ -27,8 +27,7 @@ func getOucome(x, y int) int {
 func getMoveY(x, expected int) int {
     if expected == 1 { return x }
     if expected == 2 { return x%3+1 }
-    if x == 1 { return 3 }
-    return x-1
+    return (x+1)%3+1
 }
 
 func main() {
