@@ -6,14 +6,22 @@ use std::io::{BufRead, BufReader};
 
 #[derive(Debug)]
 struct Part {
-    x: u32,
-    m: u32,
-    a: u32,
-    s: u32,
+    x: usize,
+    m: usize,
+    a: usize,
+    s: usize,
+}
+
+#[derive(Debug, Clone)]
+struct PartBounds {
+    x: (usize, usize),
+    m: (usize, usize),
+    a: (usize, usize),
+    s: (usize, usize),
 }
 
 impl Part {
-    fn get_category(&self, c: char) -> u32 {
+    fn get_category(&self, c: char) -> usize {
         match c {
             'x' => self.x,
             'm' => self.m,
@@ -30,10 +38,10 @@ impl Part {
             a: 0,
             s: 0,
         };
-        let re = Regex::new(r"(\w+)=(\d+)").unwrap();
+        let re = Regex::new(r"([xmas])=(\d+)").unwrap();
         for cap in re.captures_iter(s) {
             let category = cap.get(1).unwrap().as_str();
-            let value = cap.get(2).unwrap().as_str().parse::<u32>().unwrap();
+            let value = cap.get(2).unwrap().as_str().parse::<usize>().unwrap();
             match category {
                 "x" => part.x = value,
                 "m" => part.m = value,
@@ -45,8 +53,90 @@ impl Part {
         part
     }
 
-    fn sum(&self) -> u32 {
+    fn sum(&self) -> usize {
         self.x + self.m + self.a + self.s
+    }
+}
+
+impl PartBounds {
+    fn create() -> PartBounds {
+        PartBounds {
+            x: (1, 4000),
+            m: (1, 4000),
+            a: (1, 4000),
+            s: (1, 4000),
+        }
+    }
+
+    fn get_bound(&self, c: char) -> (usize, usize) {
+        match c {
+            'x' => self.x,
+            'm' => self.m,
+            'a' => self.a,
+            's' => self.s,
+            _ => panic!("Unkown category: {}", c),
+        }
+    }
+
+    fn set_bounds(self, c: char, value: (usize, usize)) -> PartBounds {
+        let mut result = self.clone();
+        match c {
+            'x' => result.x = value,
+            'm' => result.m = value,
+            'a' => result.a = value,
+            's' => result.s = value,
+            _ => panic!("Unkown category: {}", c),
+        }
+        result
+    }
+
+    fn volume(&self) -> usize {
+        let mut volume = 1;
+        for c in ['x', 'm', 'a', 's'].iter() {
+            let (min, max) = self.get_bound(*c);
+            volume *= max - min + 1;
+        }
+        volume
+    }
+
+    fn intersection(&self, other: PartBounds) -> Option<PartBounds> {
+        let mut result = PartBounds::create();
+        for c in ['x', 'm', 'a', 's'].iter() {
+            let (min, max) = self.get_bound(*c);
+            let (omin, omax) = other.get_bound(*c);
+            let (imin, imax) = (min.max(omin), max.min(omax));
+            if imin > imax {
+                return None;
+            }
+            result = result.set_bounds(*c, (imin, imax));
+        }
+        Some(result)
+    }
+}
+
+fn sum_intersection(
+    bounds: &[PartBounds],
+    start_index: usize,
+    current: Option<PartBounds>,
+    n_set: usize,
+    total: &mut usize,
+) {
+    if n_set == 0 {
+        if let Some(curr) = current {
+            *total += curr.volume();
+        }
+        return;
+    }
+    for i in start_index..bounds.len() - n_set + 1 {
+        let other = bounds.get(i).unwrap();
+        match current {
+            None => sum_intersection(bounds, i + 1, Some(other.clone()), n_set - 1, total),
+            Some(ref curr) => {
+                if let Some(inter) = curr.intersection(other.clone()) {
+                    sum_intersection(bounds, i + 1, Some(inter.clone()), n_set - 1, total);
+                }
+            }
+        }
     }
 }
 
@@ -59,7 +149,7 @@ enum Comparator {
 #[derive(Debug)]
 enum Rule {
     Return(String),
-    Compare(char, Comparator, u32, String),
+    Compare(char, Comparator, usize, String),
 }
 
 impl Rule {
@@ -101,7 +191,7 @@ fn parse_workflow(line: &str, workflows: &mut HashMap<String, Vec<Rule>>) {
             let caps = re.captures(rule).unwrap();
             let category = caps.get(1).unwrap().as_str().chars().next().unwrap();
             let comparator = caps.get(2).unwrap().as_str().chars().next().unwrap();
-            let value = caps.get(3).unwrap().as_str().parse::<u32>().unwrap();
+            let value = caps.get(3).unwrap().as_str().parse::<usize>().unwrap();
             let result = caps.get(4).unwrap().as_str();
             let op = match comparator {
                 '>' => Comparator::Greater,
@@ -119,7 +209,7 @@ fn parse_workflow(line: &str, workflows: &mut HashMap<String, Vec<Rule>>) {
 fn process_part(part: &Part, workflows: &HashMap<String, Vec<Rule>>, name: &str) -> bool {
     let workflow = workflows.get(name).unwrap();
     for rule in workflow.iter() {
-        if let Some(result) = rule.apply(&part) {
+        if let Some(result) = rule.apply(part) {
             match result {
                 "A" => return true,
                 "R" => return false,
@@ -128,6 +218,54 @@ fn process_part(part: &Part, workflows: &HashMap<String, Vec<Rule>>, name: &str)
         }
     }
     panic!("No rule matched for part: {:?}", part);
+}
+
+fn process_bounds(
+    part_bounds: PartBounds,
+    workflows: &HashMap<String, Vec<Rule>>,
+    name: &str,
+    rule_index: usize,
+    processed: &mut Vec<PartBounds>,
+) {
+    let workflow = workflows.get(name).unwrap();
+    let rule = workflow.get(rule_index).unwrap();
+    match rule {
+        Rule::Return(result) => {
+            match result.as_str() {
+                "A" => processed.push(part_bounds),
+                "R" => (),
+                _ => process_bounds(part_bounds.clone(), workflows, result, 0, processed),
+            };
+        }
+        Rule::Compare(cat, op, value, label) => match op {
+            Comparator::Lower => {
+                let (vmin, vmax) = part_bounds.get_bound(*cat);
+                let bounds_lower = part_bounds.clone().set_bounds(*cat, (vmin, *value - 1));
+                match label.as_str() {
+                    "A" => processed.push(bounds_lower.clone()),
+                    "R" => (),
+                    _ => process_bounds(bounds_lower.clone(), workflows, label, 0, processed),
+                };
+                if rule_index < workflow.len() - 1 {
+                    let bounds_upper = part_bounds.set_bounds(*cat, (*value, vmax));
+                    process_bounds(bounds_upper, workflows, name, rule_index + 1, processed);
+                }
+            }
+            Comparator::Greater => {
+                let (vmin, vmax) = part_bounds.get_bound(*cat);
+                let bounds_upper = part_bounds.clone().set_bounds(*cat, (*value + 1, vmax));
+                match label.as_str() {
+                    "A" => processed.push(bounds_upper.clone()),
+                    "R" => (),
+                    _ => process_bounds(bounds_upper.clone(), workflows, label, 0, processed),
+                };
+                if rule_index < workflow.len() - 1 {
+                    let bounds_lower = part_bounds.set_bounds(*cat, (vmin, *value));
+                    process_bounds(bounds_lower, workflows, name, rule_index + 1, processed);
+                }
+            }
+        },
+    }
 }
 
 fn main() {
@@ -156,4 +294,21 @@ fn main() {
         }
     }
     println!("Part 1: {} accepted parts", part1);
+    let part_bounds = PartBounds::create();
+    let mut processed: Vec<PartBounds> = Vec::new();
+    process_bounds(part_bounds, &workflows, "in", 0, &mut processed);
+    let mut part2 = processed.iter().map(|b| b.volume()).sum::<usize>();
+    for n in 2..=processed.len() {
+        let mut incr = 0;
+        sum_intersection(&processed, 0, None, n, &mut incr);
+        if incr == 0 {
+            break;
+        }
+        if n % 2 == 0 {
+            part2 -= incr;
+        } else {
+            part2 += incr;
+        }
+    }
+    println!("Part 2: {}", part2);
 }
