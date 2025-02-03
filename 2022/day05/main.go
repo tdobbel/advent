@@ -38,14 +38,14 @@ func processFile(filename string) ([][]rune, []Move) {
     scanner := bufio.NewScanner(file)
     var stacks [][]rune
     var moves []Move
-    is_stack := true
+    isStack := true
 
     for scanner.Scan() {
         line := scanner.Text()
         if len(line) == 0 {
             continue
         }
-        if !is_stack {
+        if !isStack {
             moves = append(moves, moveFromStr(line))
             continue
         }
@@ -55,7 +55,7 @@ func processFile(filename string) ([][]rune, []Move) {
             }
             crate := line[i : i+3]
             if rune(crate[1]) == '1' {
-                is_stack = false
+                isStack = false
                 for _, stack := range stacks {
                     reverse(stack)
                 }
@@ -75,30 +75,30 @@ func processFile(filename string) ([][]rune, []Move) {
 func pop(stack *[]rune) rune {
     n := len(*stack)
     if n == 0 {
-        panic("pop on empty stack")
+        log.Fatal("pop on empty stack")
     }
     last := (*stack)[n-1]
     *stack = (*stack)[:n-1]
     return last
 }
 
-func clone_crates(stack [][]rune) [][]rune {
-    res := make([][]rune, len(stack))
-    for i, s := range stack {
+func cloneCrates(stacks [][]rune) [][]rune {
+    res := make([][]rune, len(stacks))
+    for i, s := range stacks {
         res[i] = make([]rune, len(s))
         copy(res[i], s)
     }
     return res
 }
 
-func move_crates(stack_from *[]rune, stack_to *[]rune, n int) {
-    end := len(*stack_from)
-    crates := (*stack_from)[end-n:]
-    *stack_from = (*stack_from)[:end-n]
-    *stack_to = append(*stack_to, crates...)
+func moveCrates(stackFrom *[]rune, stackTo *[]rune, n int) {
+    end := len(*stackFrom)
+    crates := (*stackFrom)[end-n:]
+    *stackFrom = (*stackFrom)[:end-n]
+    *stackTo = append(*stackTo, crates...)
 }
 
-func print_stacks(stacks [][]rune) {
+func printStacks(stacks [][]rune) {
     for _, stack := range stacks {
         fmt.Print(string(stack[len(stack)-1]))
     }
@@ -113,10 +113,10 @@ func main() {
 
     filename := os.Args[1]
     stacks, moves := processFile(filename)
-    stacks2 := clone_crates(stacks)
+    stacks2 := cloneCrates(stacks)
 
     for _, move := range moves {
-        move_crates(&stacks2[move.from], &stacks2[move.to], move.n)
+        moveCrates(&stacks2[move.from], &stacks2[move.to], move.n)
         for i := 0; i < move.n; i++ {
             crate := pop(&stacks[move.from])
             stacks[move.to] = append(stacks[move.to], crate)
@@ -124,7 +124,7 @@ func main() {
     }
 
     fmt.Print("Part 1: ")
-    print_stacks(stacks)
+    printStacks(stacks)
     fmt.Print("Part 2: ")
-    print_stacks(stacks2)
+    printStacks(stacks2)
 }
