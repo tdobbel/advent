@@ -7,14 +7,14 @@ import (
     "os"
 )
 
-func check(e error) {
-    if e != nil {
-        panic(e)
-    }
-}
-
 type Move struct {
     n, from, to int
+}
+
+func handleError(err error) {
+    if err != nil {
+        log.Fatalf("Error: %v", err)
+    }
 }
 
 func moveFromStr(s string) Move {
@@ -28,6 +28,48 @@ func reverse(stack []rune) {
     for i := 0; i < n/2; i++ {
         stack[i], stack[n-i-1] = stack[n-i-1], stack[i]
     }
+}
+
+func processFile(filename string) ([][]rune, []Move) {
+    file, err := os.Open(filename)
+    handleError(err)
+    defer file.Close()
+
+    scanner := bufio.NewScanner(file)
+    var stacks [][]rune
+    var moves []Move
+    is_stack := true
+
+    for scanner.Scan() {
+        line := scanner.Text()
+        if len(line) == 0 {
+            continue
+        }
+        if !is_stack {
+            moves = append(moves, moveFromStr(line))
+            continue
+        }
+        for i := 0; i < len(line); i += 4 {
+            if i/4 >= len(stacks) {
+                stacks = append(stacks, []rune{})
+            }
+            crate := line[i : i+3]
+            if rune(crate[1]) == '1' {
+                is_stack = false
+                for _, stack := range stacks {
+                    reverse(stack)
+                }
+                break
+            }
+            if rune(crate[0]) == ' ' {
+                continue
+            }
+            stacks[i/4] = append(stacks[i/4], rune(crate[1]))
+        }
+    }
+
+    handleError(scanner.Err())
+    return stacks, moves
 }
 
 func pop(stack *[]rune) rune {
@@ -65,50 +107,14 @@ func print_stacks(stacks [][]rune) {
 
 func main() {
     if len(os.Args) != 2 {
-        fmt.Println("Please provide a filename")
+        fmt.Println("Usage: provide a filename")
         os.Exit(1)
     }
+
     filename := os.Args[1]
-    file, err := os.Open(filename)
-    check(err)
-    defer file.Close()
-    scanner := bufio.NewScanner(file)
-    var stacks [][]rune
-    var moves []Move
-    is_stack := true
-    for scanner.Scan() {
-        line := scanner.Text()
-        if len(line) == 0 {
-            continue
-        }
-        if !is_stack {
-            moves = append(moves, moveFromStr(line))
-            continue
-        }
-        for i := 0; i < len(line); i += 4 {
-            if i/4 >= len(stacks) {
-                stacks = append(stacks, []rune{})
-            }
-            crate := line[i : i+3]
-            if rune(crate[1]) == '1' {
-                is_stack = false
-                for _, stack := range stacks {
-                    reverse(stack)
-                }
-                break
-            }
-            if rune(crate[0]) == ' ' {
-                continue
-            }
-            stacks[i/4] = append(stacks[i/4], rune(crate[1]))
-        }
-    }
-
-    if err := scanner.Err(); err != nil {
-        log.Fatal(err)
-    }
-
+    stacks, moves := processFile(filename)
     stacks2 := clone_crates(stacks)
+
     for _, move := range moves {
         move_crates(&stacks2[move.from], &stacks2[move.to], move.n)
         for i := 0; i < move.n; i++ {
@@ -116,6 +122,7 @@ func main() {
             stacks[move.to] = append(stacks[move.to], crate)
         }
     }
+
     fmt.Print("Part 1: ")
     print_stacks(stacks)
     fmt.Print("Part 2: ")
