@@ -15,18 +15,18 @@ func check(e error) {
     }
 }
 
-func findCommon(left, right string) rune {
-    for _, l := range left {
-        if strings.ContainsRune(right, l) {
-            return l
-        }
-    }
-    panic("No common character found")
-}
 
-func findCommon3(str1, str2, str3 string) rune {
-    for _, c := range str1 {
-        if strings.ContainsRune(str2, c) && strings.ContainsRune(str3, c) {
+func findCommon(args ...string) rune {
+    var first = args[0]
+    for _, c := range(first) {
+        var common = true
+        for _, s := range args[1:] {
+            if !strings.ContainsRune(s, c) {
+                common = false
+                break
+            }
+        }
+        if common {
             return c
         }
     }
@@ -62,7 +62,7 @@ func main() {
         total1 += priority[findCommon(left, right)]
         group = append(group, line)
         if len(group) == 3 {
-            total2 += priority[findCommon3(group[0], group[1], group[2])]
+            total2 += priority[findCommon(group[0], group[1], group[2])]
             group = []string{}
         }
     }
