@@ -85,6 +85,16 @@ func (d *Directory) getDirectoryWthSizeAtMost(maxSize int) int {
     return total
 }
 
+func minimalDirectorySize(d *Directory, target int, freed *int) {
+    space := d.getSize()
+    if space < target {
+        return
+    }
+    *freed = min(*freed, space)
+    for _,c  := range(d.children) {
+        minimalDirectorySize(c, target, freed)
+    }
+}
 
 func processFile(filename string) *Directory {
     file, err := os.Open(filename)
@@ -129,7 +139,16 @@ func main() {
 
     filename := os.Args[1]
     root := processFile(filename)
-    part1 := root.getDirectoryWthSizeAtMost(100000)
 
+    part1 := root.getDirectoryWthSizeAtMost(100000)
     fmt.Println("Part 1", part1)
+
+    totalDiskSpace := 70000000
+    requiredSpace := 30000000
+    usedSpace := root.getSize()
+    unusedSpace := totalDiskSpace - usedSpace
+    target := requiredSpace - unusedSpace
+    part2 := 2*usedSpace
+    minimalDirectorySize(root, target, &part2)
+    fmt.Println("Part 2", part2)
 }
