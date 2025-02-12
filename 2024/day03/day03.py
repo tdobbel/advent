@@ -17,15 +17,13 @@ def main(filename: str) -> None:
         while line:
             part1 += parse_line(line)
             split = line.split("()")
-            new_line = []
             for entry in split:
                 if do:
-                    new_line.append(entry)
+                    part2 += parse_line(entry)
                 if entry.endswith("don't"):
                     do = False
                 elif entry.endswith("do"):
                     do = True
-            part2 += parse_line("".join(new_line))
             line = f.readline().strip()
     print(f"Part 1: {part1}")
     print(f"Part 2: {part2}")
