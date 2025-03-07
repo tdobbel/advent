@@ -13,7 +13,6 @@ func handleError(err error) {
     }
 }
 
-
 func processFile(filename string) []string {
     file, err := os.Open(filename)
     handleError(err)

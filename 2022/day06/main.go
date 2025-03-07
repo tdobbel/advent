@@ -1,11 +1,11 @@
 package main
 
 import (
-	"bufio"
-	"fmt"
-	"log"
-	"os"
-	"strings"
+    "bufio"
+    "fmt"
+    "log"
+    "os"
+    "strings"
 )
 
 func handleError(err error) {
