@@ -2,7 +2,7 @@ use std::env;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 
-fn extrapolate(numbers: &[i32]) -> (i32,i32) {
+fn extrapolate(numbers: &[i32], part1: &mut i32, part2: &mut i32) {
     let mut stop = false;
     let mut array = numbers.to_owned();
     let mut past: i32 = 0;
@@ -15,7 +15,8 @@ fn extrapolate(numbers: &[i32]) -> (i32,i32) {
         stop = array.iter().all(|x| *x == 0);
         factor *= -1;
     }
-    (past, future)
+    *part1 += future;
+    *part2 += past;
 }
 
 fn main() {
@@ -29,9 +30,7 @@ fn main() {
         let numbers: Vec<i32> = line.split_whitespace()
             .map(|n| n.parse::<i32>().unwrap())
             .collect();
-        let (past, future) = extrapolate(&numbers);
-        total1 += future;
-        total2 += past;
+        extrapolate(&numbers, &mut total1, &mut total2);
     }
     println!("Part 1: {}", total1);
     println!("Part 2: {}", total2);
