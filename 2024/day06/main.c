@@ -41,6 +41,17 @@ void destroyGrid(Grid *grid) {
   free(grid);
 }
 
+void setVisited(Grid *grid, int x, int y) {
+  grid->visited[y * grid->ncols + x] = 1;
+}
+
+int isLooping(Grid *grid, int x, int y, enum Direction direction) {
+  int index = 4 * (y * grid->ncols + x) + direction;
+  int looping = grid->previous[index];
+  grid->previous[index] = 1;
+  return looping;
+}
+
 int getTotalVisited(Grid *grid) {
   int nVisited = 0;
   for (int i = 0; i < grid->nrows * grid->ncols; ++i) {
@@ -49,19 +60,19 @@ int getTotalVisited(Grid *grid) {
   return nVisited;
 }
 
+int outsideGrid(Grid *grid, int x, int y) {
+  return x < 0 || x >= grid->ncols || y < 0 || y >= grid->nrows;
+}
+
 int countVisited(Grid *grid, int startX, int startY, enum Direction direction) {
   clearMemory(grid);
   int x = startX;
   int y = startY;
   int nextX, nextY;
-  int index;
   while (1) {
-    index = 4 * (y * grid->ncols + x) + direction;
-    if (grid->previous[index]) {
+    if (isLooping(grid, x, y, direction))
       return -1;
-    }
-    grid->previous[index] = 1;
-    grid->visited[y * grid->ncols + x] = 1;
+    setVisited(grid, x, y);
     nextX = x;
     nextY = y;
     switch (direction) {
@@ -78,10 +89,8 @@ int countVisited(Grid *grid, int startX, int startY, enum Direction direction) {
       nextX += 1;
       break;
     }
-    if (nextX >= grid->ncols || nextX < 0 || nextY < 0 ||
-        nextY >= grid->nrows) {
+    if (outsideGrid(grid, nextX, nextY))
       break;
-    }
     if (grid->cells[nextY][nextX] == '#') {
       direction = (direction + 1) % 4;
     } else {
