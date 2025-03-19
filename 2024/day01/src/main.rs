@@ -24,7 +24,7 @@ fn main() {
     let mut part2 = 0;
     for (i, x) in left.iter().enumerate() {
         part1 += x.abs_diff(right[i]); 
-        part2 +=  x * right.iter().filter(|&y| y == x).count();
+        part2 +=  right.iter().filter(|&y| y == x).sum::<usize>();
     }
     println!("Part 1: {}", part1);
     println!("Part 2: {}", part2);
