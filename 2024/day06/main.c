@@ -7,23 +7,61 @@ enum Direction { Up, Right, Down, Left };
 const size_t MAX_LINE_SIZE = 256;
 const size_t MAX_LINE = 256;
 
-int countVisited(char **grid, int nrows, int ncols, int startX, int startY,
-                 enum Direction direction) {
-  int *visited = (int *)calloc(sizeof(int), nrows * ncols);
-  int *previous = (int *)calloc(sizeof(int), nrows * ncols * 4);
-  int blocked = 0;
+typedef struct {
+  int nrows;
+  int ncols;
+  char **cells;
+  int *visited;
+  int *previous;
+} Grid;
+
+Grid *createGrid(char *obstacles, int nrows, int ncols) {
+  Grid *grid = (Grid *)malloc(sizeof(Grid));
+  grid->nrows = nrows;
+  grid->ncols = ncols;
+  grid->cells = (char **)malloc(sizeof(char *) * nrows);
+  grid->cells[0] = obstacles;
+  for (int i = 1; i < nrows; ++i) {
+    grid->cells[i] = grid->cells[i - 1] + ncols;
+  }
+  grid->visited = (int *)calloc(sizeof(int), nrows * ncols);
+  grid->previous = (int *)calloc(sizeof(int), nrows * ncols * 4);
+  return grid;
+}
+
+void clearMemory(Grid *grid) {
+  memset(grid->visited, 0, grid->nrows * grid->ncols * sizeof(int));
+  memset(grid->previous, 0, grid->nrows * grid->ncols * 4 * sizeof(int));
+}
+
+void destroyGrid(Grid *grid) {
+  free(grid->cells);
+  free(grid->visited);
+  free(grid->previous);
+  free(grid);
+}
+
+int getTotalVisited(Grid *grid) {
+  int nVisited = 0;
+  for (int i = 0; i < grid->nrows * grid->ncols; ++i) {
+    nVisited += grid->visited[i];
+  }
+  return nVisited;
+}
+
+int countVisited(Grid *grid, int startX, int startY, enum Direction direction) {
+  clearMemory(grid);
   int x = startX;
   int y = startY;
   int nextX, nextY;
   int index;
   while (1) {
-    index = 4 * (y * ncols + x) + direction;
-    if (previous[index]) {
-      blocked = 1;
-      break;
+    index = 4 * (y * grid->ncols + x) + direction;
+    if (grid->previous[index]) {
+      return -1;
     }
-    previous[index] = 1;
-    visited[y * ncols + x] = 1;
+    grid->previous[index] = 1;
+    grid->visited[y * grid->ncols + x] = 1;
     nextX = x;
     nextY = y;
     switch (direction) {
@@ -40,27 +78,18 @@ int countVisited(char **grid, int nrows, int ncols, int startX, int startY,
       nextX += 1;
       break;
     }
-    if (nextX >= ncols || nextX < 0 || nextY < 0 || nextY >= nrows) {
+    if (nextX >= grid->ncols || nextX < 0 || nextY < 0 ||
+        nextY >= grid->nrows) {
       break;
     }
-    if (grid[nextY][nextX] == '#') {
+    if (grid->cells[nextY][nextX] == '#') {
       direction = (direction + 1) % 4;
     } else {
       x = nextX;
       y = nextY;
     }
   }
-  int nVisited = 0;
-  if (blocked) {
-    nVisited = -1;
-  } else {
-    for (int i = 0; i < nrows * ncols; ++i) {
-      nVisited += visited[i];
-    }
-  }
-  free(previous);
-  free(visited);
-  return nVisited;
+  return getTotalVisited(grid);
 }
 
 int main(int argc, char *argv[]) {
@@ -90,31 +119,25 @@ int main(int argc, char *argv[]) {
   fclose(file);
 
   obstacles = (char *)realloc(obstacles, sizeof(char) * index);
-  // Re-arrange obstacles as 2D grid
-  char **grid = (char **)malloc(sizeof(char *) * nrows);
-  grid[0] = obstacles;
-  for (int i = 1; i < nrows; ++i) {
-    grid[i] = grid[i - 1] + ncols;
-  }
+  Grid *grid = createGrid(obstacles, nrows, ncols);
   int nVisited;
-  nVisited = countVisited(grid, nrows, ncols, startX, startY, Up);
+  nVisited = countVisited(grid, startX, startY, Up);
   printf("Part 1: %d\n", nVisited);
   int part2 = 0;
   for (int i = 0; i < nrows; ++i) {
     for (int j = 0; j < ncols; ++j) {
-      if (grid[i][j] == '#' || grid[i][j] == '^')
+      if (grid->cells[i][j] == '#' || grid->cells[i][j] == '^')
         continue;
-      grid[i][j] = '#';
-      nVisited = countVisited(grid, nrows, ncols, startX, startY, Up);
+      grid->cells[i][j] = '#';
+      nVisited = countVisited(grid, startX, startY, Up);
       if (nVisited < 0) {
         part2++;
       }
-      grid[i][j] = '.';
+      grid->cells[i][j] = '.';
     }
   }
   printf("Part 2: %d\n", part2);
-
   free(obstacles);
-  free(grid);
+  destroyGrid(grid);
   return 0;
 }
