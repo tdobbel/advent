@@ -1,3 +1,4 @@
+use std::env;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::collections::HashSet;
@@ -7,8 +8,8 @@ fn find_trails(pos: &(i32,i32), value: i32, topo: &Vec<u8>, imax: i32, jmax: i32
         tails.push(*pos);
     }
     for (ii,jj) in [(-1,0), (1,0), (0,-1), (0,1)].iter() {
-        let i = pos.0+*ii as i32;
-        let j = pos.1+*jj as i32;
+        let i = pos.0 + *ii;
+        let j = pos.1 + *jj;
         if i < 0 || i >= imax || j < 0 || j >= jmax {
             continue;
         }
@@ -21,7 +22,8 @@ fn find_trails(pos: &(i32,i32), value: i32, topo: &Vec<u8>, imax: i32, jmax: i32
 
 
 fn main() {
-    let file = File::open("input").unwrap();
+    let args = env::args().nth(1).expect("Please provide an input file");
+    let file = File::open(args).unwrap();
     let reader = BufReader::new(file);
     let mut imax: i32 = 0;
     let mut jmax: i32 = 0;
