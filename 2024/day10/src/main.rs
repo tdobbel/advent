@@ -1,54 +1,57 @@
 use std::env;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
-use std::collections::HashSet;
+use std::collections::HashMap;
 
-fn find_trails(pos: &(i32,i32), value: i32, topo: &Vec<u8>, imax: i32, jmax: i32, tails: &mut Vec<(i32,i32)>) {
-    if value == 9 {
-        tails.push(*pos);
+
+fn find_trails(topo: &[usize], ncols: usize, index: usize, tails: &mut HashMap<usize,usize>) {
+    if topo[index] == 9 {
+        *tails.entry(index).or_insert(0) += 1;
+        return;
     }
-    for (ii,jj) in [(-1,0), (1,0), (0,-1), (0,1)].iter() {
-        let i = pos.0 + *ii;
-        let j = pos.1 + *jj;
-        if i < 0 || i >= imax || j < 0 || j >= jmax {
+    let y0 = (index / ncols) as i32;
+    let x0 = (index % ncols) as i32;
+    let ncols_ = ncols as i32;
+    let nrows = topo.len() as i32 / ncols_;
+    for (dx, dy) in [(-1,0), (1,0), (0,-1), (0,1)].iter() {
+        let x = x0 + dx;
+        let y = y0 + dy;
+        if x < 0 || x >= ncols_ || y < 0 || y >= nrows {
             continue;
         }
-        let newvalue = topo[(i*jmax+j) as usize] as i32;
-        if newvalue - value == 1 {
-            find_trails(&(i,j), newvalue, topo, imax, jmax, tails);
+        let index_ = (y * ncols_ + x) as usize;
+        if topo[index_] == topo[index] + 1 {
+            find_trails(topo, ncols, index_, tails);
         }
     }
 }
-
 
 fn main() {
     let args = env::args().nth(1).expect("Please provide an input file");
     let file = File::open(args).unwrap();
     let reader = BufReader::new(file);
-    let mut imax: i32 = 0;
-    let mut jmax: i32 = 0;
-    let mut topo = Vec::<u8>::new();
-    let mut seeds = Vec::<(i32,i32)>::new();
-    for (i,line) in reader.lines().enumerate() {
+    let mut ncols: usize = 0;
+    let mut topo: Vec<usize> = Vec::new();
+    let mut seeds: Vec<usize> = Vec::new();
+    for (i, line) in reader.lines().enumerate() {
         let line = line.unwrap();
-        jmax = line.len() as i32;
-        imax += 1;
-        for (j,v) in line.chars()
-            .map(|c| c.to_string().parse::<u8>().unwrap())
-            .enumerate() {
-            if v == 0 {
-                seeds.push((i as i32,j as i32));
+        ncols = line.len();
+        for (j, c) in line.chars().enumerate() {
+            let value = c.to_digit(10).unwrap() as usize;
+            topo.push(value);
+            if value == 0 {
+                seeds.push(i*ncols+j);
             }
-            topo.push(v);
         }
     }
     let mut totalscore1: usize = 0;
     let mut totalscore2: usize = 0;
+    let mut tails: HashMap<usize,usize>;
     for seed in seeds.iter() {
-        let mut tails = Vec::<(i32,i32)>::new();
-        find_trails(seed, 0, &topo, imax, jmax, &mut tails);
-        totalscore2 += tails.len();
-        totalscore1 += tails.iter().collect::<HashSet<_>>().len();
+        tails = HashMap::new();
+        find_trails(&topo, ncols, *seed, &mut tails);
+        totalscore2 += tails.values().sum::<usize>();
+        totalscore1 += tails.len(); 
     }
     println!("Total score part 1: {}", totalscore1);
     println!("Total score part 2: {}", totalscore2);
