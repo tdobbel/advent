@@ -4,39 +4,6 @@ use std::collections::HashMap;
 use std::env;
 use anyhow::Result;
 
-fn find_number(line: &str, numbers: &HashMap<&str, u32>, start: bool) -> Option<u32> {
-    let n = line.len();
-    for i in 0..line.len() {
-        let c = if start {
-            line.chars().nth(i).unwrap()
-        } else {
-            line.chars().nth_back(i).unwrap()
-        };
-        match c.to_digit(10) {
-            Some(n) => return Some(n),
-            None => {
-                if i < 2 {
-                    continue;
-                }
-                let slice_ = if start {
-                    let indx_from = if i < 4 {0} else {i-4};
-                    &line[indx_from..i+1]
-                }else {
-                    let indx_from = n-i-1;
-                    let indx_to = if i < 4 {n} else {indx_from+5}; 
-                    &line[indx_from..indx_to]
-                };
-                for (k,v) in numbers.iter() {
-                    if slice_.contains(k) {
-                        return Some(*v);
-                    }
-                }
-            }
-        }
-    }
-    None
-}
-
 fn main() -> Result<()> {
     let args = env::args().nth(1).expect("Please provide a file name");
     let file = File::open(args)?;
@@ -53,25 +20,50 @@ fn main() -> Result<()> {
     numbers.insert("seven", 7);
     numbers.insert("eight", 8);
     numbers.insert("nine", 9);
+
+    let mut found: bool;
     for line in reader.lines() {
         let line = line?;
-        let mut x = None;
-        let mut y = None;
-        for i in 0..line.len() {
-            let c = line.chars().nth(i).unwrap();
-            if let Some(n) = c.to_digit(10) { x = Some(n); }
-            let c = line.chars().nth_back(i).unwrap();
-            if let Some(n) = c.to_digit(10) { y = Some(n); }
-            if x.is_some() && y.is_some() {
-                break
+        let mut start = 0;
+        let mut end = line.len()-1;
+        while !line.chars().nth(start).unwrap().is_digit(10) {
+            start += 1;
+        }
+        let x1 = line.chars().nth(start).unwrap().to_digit(10).unwrap();
+        let mut x2 = x1; 
+        found = false;
+        for i in 1..start+1 {
+            for (k,v) in numbers.iter() {
+                if line[..i].contains(k) {
+                    x2 = *v;
+                    found = true;
+                    break;
+                }
+            }
+            if found {
+                break;
             }
         }
-        let x = x.unwrap();
-        let y = y.unwrap();
-        total1 += 10*x+y;
-        let x = find_number(&line, &numbers, true).unwrap();
-        let y = find_number(&line, &numbers, false).unwrap(); 
-        total2 += 10*x+y;
+        while !line.chars().nth(end).unwrap().is_digit(10) {
+            end -= 1;
+        }
+        let y1 = line.chars().nth(end).unwrap().to_digit(10).unwrap();
+        let mut y2 = y1;
+        let mut i = line.len()-2;
+        found = false;
+        while i > end && !found {
+            for (k,v) in numbers.iter() {
+                if line[i..].contains(k) {
+                    y2 = *v;
+                    found = true;
+                    break;
+                }
+            }
+            i -= 1;
+        }
+
+        total1 += 10 * x1 + y1;
+        total2 += 10 * x2 + y2;
     }
     println!("Part 1: {}", total1);
     println!("Part 2: {}", total2);
