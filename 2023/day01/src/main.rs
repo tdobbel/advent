@@ -24,11 +24,8 @@ fn main() -> Result<()> {
     let mut found: bool;
     for line in reader.lines() {
         let line = line?;
-        let mut start = 0;
         let mut end = line.len()-1;
-        while !line.chars().nth(start).unwrap().is_digit(10) {
-            start += 1;
-        }
+        let start = line.chars().position(|c| c.is_ascii_digit()).unwrap();
         let x1 = line.chars().nth(start).unwrap().to_digit(10).unwrap();
         let mut x2 = x1; 
         found = false;
@@ -44,7 +41,7 @@ fn main() -> Result<()> {
                 break;
             }
         }
-        while !line.chars().nth(end).unwrap().is_digit(10) {
+        while !line.chars().nth(end).unwrap().is_ascii_digit() {
             end -= 1;
         }
         let y1 = line.chars().nth(end).unwrap().to_digit(10).unwrap();
