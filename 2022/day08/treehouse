@@ -1,0 +1,135 @@
+#!/usr/bin/env bash
+
+declare -A trees
+
+nx=0
+ny=0
+while read -r row; do
+    nx=${#row}
+    for ((x = 0; x < nx; x++)); do
+        trees["$x,$ny"]=${row:x:1}
+    done
+    ((ny++))
+done
+
+plot() {
+    for ((y = 0; y < ny; y++)); do
+        for ((x = 0; x < nx; x++)); do
+            echo -n "${trees[$x,$y]}"
+        done
+        echo
+    done
+}
+
+is_visible() {
+    local x=$1
+    local y=$2
+    local visible_top=1
+    local visible_bottom=1
+    local visible_left=1
+    local visible_right=1
+    local tree_height=${trees["$x,$y"]}
+    local h
+    # Top
+    for ((i = 0; i < y; i++)); do
+        h=${trees["$x,$i"]}
+        if ((h >= tree_height)); then
+            visible_top=0
+            break
+        fi
+    done
+    if ((visible_top == 1)); then
+        echo 1
+        return
+    fi
+    # Bottom
+    for ((i = ny - 1; i > y; i--)); do
+        h=${trees["$x,$i"]}
+        if ((h >= tree_height)); then
+            visible_bottom=0
+            break
+        fi
+    done
+    if ((visible_bottom == 1)); then
+        echo 1
+        return
+    fi
+    # Left
+    for ((i = 0; i < x; i++)); do
+        h=${trees["$i,$y"]}
+        if ((h >= tree_height)); then
+            visible_left=0
+            break
+        fi
+    done
+    if ((visible_left == 1)); then
+        echo 1
+        return
+    fi
+    # Right
+    for ((i = nx - 1; i > x; i--)); do
+        h=${trees["$i,$y"]}
+        if ((h >= tree_height)); then
+            visible_right=0
+            break
+        fi
+    done
+    echo $visible_right
+}
+
+scenic_score() {
+    local x=$1
+    local y=$2
+    local h
+    local score_top=0
+    local score_bottom=0
+    local score_left=0
+    local score_right=0
+    local tree_height=${trees["$x,$y"]}
+    for ((i = y - 1; i >= 0; i--)); do
+        ((score_top ++))
+        h=${trees["$x,$i"]}
+        if ((h >= tree_height)); then
+            break
+        fi
+    done
+    for ((i = y + 1; i < ny; i++)); do
+        ((score_bottom ++))
+        h=${trees["$x,$i"]}
+        if ((h >= tree_height)); then
+            break
+        fi
+    done
+    for ((i = x - 1; i >= 0; i--)); do
+        ((score_left ++))
+        h=${trees["$i,$y"]}
+        if ((h >= tree_height)); then
+            break
+        fi
+    done
+    for ((i = x + 1; i < nx; i++)); do
+        ((score_right ++))
+        h=${trees["$i,$y"]}
+        if ((h >= tree_height)); then
+            break
+        fi
+    done
+    echo $((score_top * score_bottom * score_left * score_right))
+}
+
+part1=0
+part2=0
+for ((y = 0; y < ny; y++)); do
+    for ((x = 0; x < nx; x++)); do
+        ((part1 += $(is_visible $x $y)))
+        score=$(scenic_score $x $y)
+        if ((score > part2)); then
+            part2=$score
+        fi
+    done
+done
+
+echo "Part 1: $part1"
+echo "Part 2: $part2"
+
+
