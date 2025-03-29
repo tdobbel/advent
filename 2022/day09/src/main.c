@@ -58,6 +58,14 @@ int distance(int x1, int y1, int x2, int y2) {
   return dx > dy ? dx : dy;
 }
 
+int signum(int x) {
+  if (x > 0)
+    return 1;
+  if (x < 0)
+    return -1;
+  return 0;
+}
+
 void moveRope(Rope *rope, int dx, int dy) {
   rope->knots[0] += dx;
   rope->knots[1] += dy;
@@ -68,12 +76,8 @@ void moveRope(Rope *rope, int dx, int dy) {
     x = rope->knots[i * 2 + 0];
     y = rope->knots[i * 2 + 1];
     if (distance(xprev, yprev, x, y) > 1) {
-      dx_ = xprev - x;
-      dy_ = yprev - y;
-      if (dx_ != 0)
-        dx_ /= abs(dx_);
-      if (dy_ != 0)
-        dy_ /= abs(dy_);
+      dx_ = signum(xprev - x);
+      dy_ = signum(yprev - y);
       rope->knots[i * 2 + 0] += dx_;
       rope->knots[i * 2 + 1] += dy_;
       if (i == rope->size - 1) {
