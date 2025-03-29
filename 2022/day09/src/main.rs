@@ -20,7 +20,7 @@ impl Rope {
         }
     }
 
-    pub fn move_one_step(&mut self, dx: i32, dy: i32) {
+    fn move_one_step(&mut self, dx: i32, dy: i32) {
         self.knots[0].0 += dx;
         self.knots[0].1 += dy;
         for i in 1..self.knots.len() {
