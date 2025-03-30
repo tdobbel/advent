@@ -43,33 +43,33 @@ fn part1(values: &Vec<i32>) -> u64 {
         }
     }
     let mut checksum: u64 = 0;
-    for (i,v) in result.iter().enumerate() {
+    for (i, v) in result.iter().enumerate() {
         checksum += (*v as u64) * (i as u64);
+        println!("block {} -> value{}", i, v);
     }
     checksum
 }
 
-fn part2(values: &Vec<i32>) -> u64{
+fn part2(values: &Vec<i32>) -> u64 {
     let mut blocks = Vec::<Block>::new();
     let mut free = false;
-    for (i,v) in values.iter().enumerate() {
+    for (i, v) in values.iter().enumerate() {
         if free {
-            blocks.push(Block{
+            blocks.push(Block {
                 free_space: *v as usize,
                 values: Vec::<i32>::new(),
                 sizes: Vec::<usize>::new(),
             });
-        }
-        else {
-            blocks.push(Block{
+        } else {
+            blocks.push(Block {
                 free_space: 0,
                 values: vec![(i as i32) / 2],
-                sizes: vec![*v as usize]
+                sizes: vec![*v as usize],
             });
         }
         free = !free;
     }
-    let mut iright = blocks.len()-1;
+    let mut iright = blocks.len() - 1;
     while iright > 0 {
         let value = blocks[iright].values[0];
         let size = blocks[iright].sizes[0];
@@ -81,7 +81,7 @@ fn part2(values: &Vec<i32>) -> u64{
                 block.sizes.push(size);
                 block.free_space -= size;
                 moved = true;
-                break
+                break;
             }
         }
         if moved {
@@ -114,7 +114,10 @@ fn main() {
     let file = File::open("input").unwrap();
     let reader = BufReader::new(file);
     let line = reader.lines().next().unwrap().unwrap();
-    let values = line.chars().map(|c| c.to_string().parse::<i32>().unwrap()).collect::<Vec<i32>>();
+    let values = line
+        .chars()
+        .map(|c| c.to_string().parse::<i32>().unwrap())
+        .collect::<Vec<i32>>();
     println!("checksum {}", part1(&values));
     println!("checksum {}", part2(&values));
 }
