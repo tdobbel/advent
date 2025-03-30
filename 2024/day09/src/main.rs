@@ -45,7 +45,6 @@ fn part1(values: &Vec<i32>) -> u64 {
     let mut checksum: u64 = 0;
     for (i, v) in result.iter().enumerate() {
         checksum += (*v as u64) * (i as u64);
-        println!("block {} -> value{}", i, v);
     }
     checksum
 }
