@@ -1,0 +1,88 @@
+#!/usr/bin/env bash
+
+n_knots=2
+
+rope=()
+visited=("0,0")
+for ((i=0; i < n_knots; i++)); do
+    rope+=("0,0")
+done
+
+sign() {
+    if (( $1 < 0 )); then
+        echo -1
+    elif (( $1 > 0 )); then
+        echo 1
+    else
+        echo 0
+    fi
+}
+
+abs() {
+    if (( $1 < 0 )); then
+        echo $((-$1))
+    else
+        echo $1
+    fi
+}
+
+print() {
+    for ((i=0; i < n_knots; i++)); do
+        echo "knots $i: ${rope[i]}"
+    done
+}
+
+move-rope() {
+    local dx=$1
+    local dy=$2
+    IFS=',' read -r x y <<< "${rope[0]}"
+    local x_prev=$((x + dx))
+    local y_prev=$((y + dy))
+    rope[0]="$x_prev,$y_prev"
+    local i
+    for ((i=1; i < n_knots; i++)); do
+        IFS=',' read -r x y <<< "${rope[i]}"
+        dx=$((x_prev - x))
+        dy=$((y_prev - y))
+        abs_dx=$(abs $dx)
+        abs_dy=$(abs $dy)
+        if ((abs_dx > 1 || abs_dy > 1)); then
+            dx=$(sign $dx)
+            dy=$(sign $dy)
+            x=$((x + dx))
+            y=$((y + dy))
+            rope[i]="$x,$y"
+            if ((i == n_knots - 1)); then
+                visited+=("$x,$y")
+            fi
+        fi
+        x_prev=$x
+        y_prev=$y
+    done
+}
+
+while read -r line; do
+    IFS=" " read -r direction steps <<< "$line"
+    dir_x=0
+    dir_y=0
+    case $direction in
+        U)
+            dir_y=-1
+            ;;
+        D)
+            dir_y=1
+            ;;
+        L)
+            dir_x=-1
+            ;;
+        R)
+            dir_x=1
+            ;;
+    esac
+    for ((i=0; i < steps; i++)); do
+        move-rope $dir_x $dir_y
+    done
+done
+
+echo $(printf "%s\n" "${visited[@]}" | sort -u | wc -l)
+
