@@ -1,122 +1,134 @@
-use std::fs::File;
-use std::io::{BufRead, BufReader};
+use anyhow::Result;
+use std::env::args;
+use std::fs;
 
 struct Block {
-    free_space: usize,
-    values: Vec<i32>,
-    sizes: Vec<usize>,
+    size: usize,
+    values: Vec<Option<usize>>,
+    index: usize,
+    n_values: usize,
 }
 
-fn part1(values: &Vec<i32>) -> u64 {
-    let mut ileft = 0;
-    let mut result = Vec::<i32>::new();
-    let mut fidleft = 0;
-    let mut iright = values.len() - 1;
-    if values.len() % 2 == 0 {
-        iright -= 1;
-    }
-    let mut n_right = values[iright];
-    let mut fidright = iright as i32 / 2;
-    while iright > ileft {
-        for _ in 0..values[ileft] {
-            result.push(fidleft);
-        }
-        ileft += 1;
-        for _ in 0..values[ileft] {
-            result.push(fidright);
-            n_right -= 1;
-            if n_right == 0 {
-                iright -= 2;
-                fidright -= 1;
-                n_right = values[iright];
-            }
-            if iright < ileft {
-                break;
-            }
-        }
-        ileft += 1;
-        fidleft += 1;
-    }
-    if n_right > 0 {
-        for _ in 0..n_right {
-            result.push(fidright);
-        }
-    }
-    let mut checksum: u64 = 0;
-    for (i, v) in result.iter().enumerate() {
-        checksum += (*v as u64) * (i as u64);
-    }
-    checksum
-}
-
-fn part2(values: &Vec<i32>) -> u64 {
+fn parse_blocks(disk_map: &[u32]) -> Vec<Block> {
     let mut blocks = Vec::<Block>::new();
-    let mut free = false;
-    for (i, v) in values.iter().enumerate() {
-        if free {
-            blocks.push(Block {
-                free_space: *v as usize,
-                values: Vec::<i32>::new(),
-                sizes: Vec::<usize>::new(),
-            });
+    for (i, &size) in disk_map.iter().enumerate() {
+        let size = size as usize;
+        let (n_values, value) = if i % 2 == 0 {
+            (size, Some(i / 2))
         } else {
-            blocks.push(Block {
-                free_space: 0,
-                values: vec![(i as i32) / 2],
-                sizes: vec![*v as usize],
-            });
-        }
-        free = !free;
+            (0, None)
+        };
+        let block = Block {
+            size,
+            values: vec![value; size],
+            index: 0,
+            n_values,
+        };
+        blocks.push(block);
     }
-    let mut iright = blocks.len() - 1;
-    while iright > 0 {
-        let value = blocks[iright].values[0];
-        let size = blocks[iright].sizes[0];
-        let mut moved = false;
-        for i in 0..iright {
-            let block = &mut blocks[i];
-            if block.free_space >= size {
-                block.values.push(value);
-                block.sizes.push(size);
-                block.free_space -= size;
-                moved = true;
-                break;
-            }
+    blocks
+}
+
+fn next_left(disk: &[Block], ileft: usize) -> Option<usize> {
+    let mut index = ileft;
+    while index < disk.len() {
+        let block = &disk[index];
+        if block.index < block.size {
+            return Some(index);
         }
-        if moved {
-            blocks[iright].values.pop();
-            blocks[iright].sizes.pop();
-            blocks[iright].free_space = size;
-        }
-        iright -= 2;
+        index += 2;
     }
-    let mut i: u64 = 0;
-    let mut checksum: u64 = 0;
-    for block in blocks.iter() {
-        for j in 0..block.values.len() {
-            for _ in 0..block.sizes[j] {
-                checksum += (block.values[j] as u64) * i;
-                //print!("{}", block.values[j]);
-                i += 1;
+    None
+}
+
+fn next_right(disk: &[Block], iright: usize) -> Option<usize> {
+    let mut index = iright;
+    while disk[index].n_values == 0 {
+        index = index.checked_sub(2)?;
+    }
+    Some(index)
+}
+
+fn check_sum(disk: &[Block]) -> u64 {
+    let mut result = 0;
+    let mut i = 0;
+    for block in disk.iter() {
+        for value in block.values.iter() {
+            if let Some(val) = value {
+                let increment = val * i;
+                result += increment as u64;
             }
-        }
-        for _ in 0..block.free_space {
-            //print!(".");
             i += 1;
         }
     }
-    //print!("\n");
-    checksum
+    result
 }
 
-fn main() {
-    let file = File::open("input").unwrap();
-    let reader = BufReader::new(file);
-    let line = reader.lines().next().unwrap().unwrap();
-    let values = line
+fn part1(disk: &mut [Block]) -> u64 {
+    let mut ileft = next_left(&disk, 1).unwrap();
+    let mut iright = next_right(
+        &disk,
+        if disk.len() % 2 == 0 {
+            disk.len() - 2
+        } else {
+            disk.len() - 1
+        },
+    )
+    .unwrap();
+    while ileft < iright {
+        while disk[ileft].index < disk[ileft].size && disk[iright].n_values > 0 {
+            let indx_left = disk[ileft].index;
+            let indx_right = disk[iright].n_values - 1;
+            disk[ileft].values[indx_left] = disk[iright].values[indx_right];
+            disk[iright].values[indx_right] = None;
+            disk[ileft].index += 1;
+            disk[iright].n_values -= 1;
+        }
+        ileft = next_left(&disk, ileft).unwrap();
+        iright = next_right(&disk, iright).unwrap();
+    }
+    check_sum(&disk)
+}
+
+fn part2(disk: &mut [Block]) -> u64 {
+    let mut iright = if disk.len() % 2 == 0 {
+        disk.len() - 2
+    } else {
+        disk.len() - 1
+    };
+    loop {
+        let mut ileft = 1;
+        while ileft < iright {
+            if disk[ileft].size >= disk[iright].size {
+                for i in 0..disk[iright].size {
+                    disk[ileft].values[disk[ileft].index] = disk[iright].values[i];
+                    disk[iright].values[i] = None;
+                    disk[ileft].index += 1;
+                    disk[ileft].size -= 1;
+                }
+                break;
+            }
+            ileft += 2;
+        }
+        if iright == 0 {
+            break;
+        }
+        iright -= 2;
+    }
+    check_sum(disk)
+}
+
+fn main() -> Result<()> {
+    let filename = args().nth(1).expect("Missing input file");
+    let disk_map: Vec<u32> = fs::read_to_string(filename)?
+        .trim()
         .chars()
-        .map(|c| c.to_string().parse::<i32>().unwrap())
-        .collect::<Vec<i32>>();
-    println!("checksum {}", part1(&values));
-    println!("checksum {}", part2(&values));
+        .map(|c| c.to_digit(10).unwrap())
+        .collect();
+    let sol1 = part1(&mut parse_blocks(&disk_map));
+    println!("Part 1: {}", sol1);
+    let sol2 = part2(&mut parse_blocks(&disk_map));
+    println!("Part 2: {}", sol2);
+
+    Ok(())
 }
