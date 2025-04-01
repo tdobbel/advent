@@ -63,6 +63,18 @@ void setFencePoints(Fence *fence, int x, int y, char side) {
   }
 }
 
+int connected(const Fence *f0, const Fence *f1) {
+  return f0->x[1] == f1->x[0] && f0->y[1] == f1->y[0];
+}
+
+int isCorner(const Fence *f0, const Fence *f1) {
+  int u0 = f0->x[1] - f0->x[0];
+  int v0 = f0->y[1] - f0->y[0];
+  int u1 = f1->x[1] - f1->x[0];
+  int v1 = f1->y[1] - f1->y[0];
+  return u0 != u1 || v0 != v1;
+}
+
 void computePrice(const Plots *plots, const char region, int x, int y,
                   int *visited, int *area, int *perimeter, Fence *fences) {
   visited[y * plots->nx + x] = 1;
@@ -87,49 +99,32 @@ void computePrice(const Plots *plots, const char region, int x, int y,
 
 int countCorners(Fence *fences, int perimeter) {
   int corners = 0;
-  int remaining = perimeter;
-  int u[2], v[2];
-  int *touched = (int *)calloc(sizeof(int), perimeter);
-  int icurr, found, cntr, first;
-  while (remaining > 0) {
-    icurr = 0;
-    Fence *curr = &fences[icurr];
-    while (!touched[0]) {
-      found = 0;
-      for (int i = 0; i < remaining; ++i) {
-        if (i == icurr || touched[i])
-          continue;
-        Fence *next = &fences[i];
-        if (next->x[0] == curr->x[1] && next->y[0] == curr->y[1]) {
-          u[0] = curr->x[1] - curr->x[0];
-          u[1] = curr->y[1] - curr->y[0];
-          v[0] = next->x[1] - next->x[0];
-          v[1] = next->y[1] - next->y[0];
-          if (u[0] != v[0] || u[1] != v[1]) {
-            corners++;
-          }
-          icurr = i;
-          curr = next;
-          touched[icurr] = 1;
-          found = 1;
-          break;
-        }
-      }
-      if (!found) {
-        printf("Could not close contour :( \n");
-        exit(1);
+  int icurr = 0;
+  Fence *first = &fences[icurr];
+  Fence tmp, *curr, *next;
+  curr = first;
+  while (icurr < perimeter) {
+    for (int i = icurr + 1; i < perimeter; ++i) {
+      next = &fences[i];
+      if (connected(curr, next)) {
+        if (isCorner(curr, next))
+          corners++;
+        icurr += 1;
+        tmp = fences[icurr];
+        fences[icurr] = fences[i];
+        fences[i] = tmp;
+        curr = &fences[icurr];
+        break;
       }
     }
-    cntr = 0;
-    for (int i = 0; i < remaining; ++i) {
-      if (!touched[i]) {
-        fences[cntr++] = fences[i];
-      }
+    if (connected(curr, first)) {
+      if (isCorner(curr, first))
+        corners++;
+      icurr += 1;
+      first = &fences[icurr];
+      curr = first;
     }
-    memset(touched, 0, sizeof(int) * cntr);
-    remaining = cntr;
   }
-  free(touched);
   return corners;
 }
 
