@@ -57,6 +57,10 @@ void plotMaze(Maze *maze) {
   }
 }
 
+void resetVisited(Maze *maze) {
+  memset(maze->visited, 0, sizeof(int) * maze->nx * maze->ny);
+}
+
 void freeMaze(Maze *maze) {
   if (maze) {
     free(maze->walls);
@@ -144,6 +148,19 @@ LastCell *pop(LinkedList *list, int index) {
   return cell;
 }
 
+void emptyList(LinkedList *list) {
+  struct Node *node = list->head;
+  while (node) {
+    struct Node *next = node->next;
+    freeCell(node->cell);
+    free(node);
+    node = next;
+  }
+  list->head = NULL;
+  list->tail = NULL;
+  list->size = 0;
+}
+
 void freeList(LinkedList *list) {
   struct Node *node = list->head;
   while (node) {
@@ -220,11 +237,56 @@ LastCell *solveMaze(Maze *maze, LinkedList *moves) {
       i++;
     }
     cell = pop(moves, ibest);
-    if (cell->x == maze->endX && cell->y == maze->endY)
+    if (cell->x == maze->endX && cell->y == maze->endY) {
+      emptyList(moves);
       return cell;
+    }
     nextMoves(maze, cell, moves);
     freeCell(cell);
   }
 
   return NULL;
+}
+
+int findAllPaths(Maze *maze, LastCell *ref) {
+  LastCell *start = firstCell(maze->startX, maze->startY);
+  int *bestPathCell = calloc(sizeof(int), maze->nx * maze->ny);
+  for (int i = 0; i < ref->n_previous; ++i) {
+    bestPathCell[ref->previous[i]] = 1;
+  }
+  bestPathCell[maze->endX + maze->endY * maze->nx] = 1;
+  LinkedList *moves = initList();
+  LastCell *next, *end;
+  for (int i = 1; i < ref->n_previous - 1; ++i) {
+    resetVisited(maze);
+    nextMoves(maze, start, moves);
+    freeCell(start);
+    // Check possible next moves
+    for (int j = 0; j < moves->size; ++j) {
+      next = get(moves, j);
+      if (next->x + next->y * maze->nx == ref->previous[i]) {
+        start = pop(moves, j);
+        break;
+      }
+    }
+    // No alternative path possible
+    if (moves->size == 0)
+      continue;
+    maze->visited[start->x + start->y * maze->nx] = 1;
+    end = solveMaze(maze, moves);
+    if (end && end->score <= ref->score) {
+      for (int j = 0; j < end->n_previous; ++j) {
+        bestPathCell[end->previous[j]] = 1;
+      }
+    }
+  }
+  int result = 0;
+  for (int i = 0; i < maze->ny * maze->ny; ++i) {
+    result += bestPathCell[i];
+  }
+  freeList(moves);
+  freeCell(start);
+  freeCell(end);
+  free(bestPathCell);
+  return result;
 }

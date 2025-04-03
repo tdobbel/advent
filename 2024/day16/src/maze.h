@@ -39,12 +39,15 @@ LinkedList *initList();
 LastCell *pop(LinkedList *list, int index);
 LastCell *get(LinkedList *list, int index);
 void push(LinkedList *list, LastCell *cell);
+void emptyList(LinkedList *list);
 void freeList(LinkedList *list);
 
 Maze *readMaze(char *filename);
+void resetVisited(Maze *maze);
 void freeMaze(Maze *maze);
 void plotMaze(Maze *maze);
 
 LastCell *solveMaze(Maze *maze, LinkedList *moves);
+int findAllPaths(Maze *maze, LastCell *ref);
 
 #endif

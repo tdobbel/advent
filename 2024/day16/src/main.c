@@ -19,11 +19,15 @@ int main(int argc, char *argv[]) {
   LastCell *start = firstCell(maze->startX, maze->startY);
   LinkedList *moves = initList();
   push(moves, start);
-
   LastCell *end = solveMaze(maze, moves);
-  if (end) {
-    printf("%d\n", end->score);
+  if (!end) {
+    fprintf(stderr, "No solution found in part 1 :(\n");
+    return EXIT_FAILURE;
   }
+  printf("Part 1: %d\n", end->score);
+
+  // Part 2;
+  printf("Part 2: %d\n", findAllPaths(maze, end));
 
   freeCell(end);
   freeMaze(maze);
