@@ -207,8 +207,9 @@ pub fn find_all_best_paths(maze: &mut Maze, ref_path: &Path) -> usize {
                 .for_each(|p| best_cells[p.1][p.0] = true);
         }
     }
-    best_cells
-        .iter()
-        .map(|x| x.iter().map(|y| if *y { 1 } else { 0 }).sum::<usize>())
-        .sum::<usize>()
+    let mut result = 0;
+    for row in best_cells.iter() {
+        result += row.iter().filter(|&x| *x).count()
+    }
+    result
 }
