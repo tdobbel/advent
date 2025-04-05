@@ -81,7 +81,7 @@ LastCell *firstCell(int startX, int startY) {
 }
 
 void freeCell(LastCell *cell) {
-  if (cell->previous)
+  if (cell->previous != NULL)
     free(cell->previous);
   free(cell);
 }
@@ -172,6 +172,82 @@ void freeList(LinkedList *list) {
   free(list);
 }
 
+BinaryHeap *createBinaryHeap() {
+  BinaryHeap *bh = malloc(sizeof(BinaryHeap));
+  bh->size = 0;
+  bh->capacity = 15;
+  bh->nodes = malloc(sizeof(BinaryHeapNode) * bh->capacity);
+  return bh;
+}
+
+void freeBinaryHeap(BinaryHeap *bh) {
+  for (int i = 0; i < bh->size; ++i) {
+    BinaryHeapNode *node = bh->nodes + i;
+    freeCell(node->path);
+  }
+  free(bh->nodes);
+  free(bh);
+}
+
+void swapHeapNodes(BinaryHeapNode *a, BinaryHeapNode *b) {
+  BinaryHeapNode temp = *a;
+  *a = *b;
+  *b = temp;
+}
+
+static void heapify(BinaryHeap *bh, int index) {
+  int left = 2 * index + 1;
+  int right = 2 * index + 2;
+  int smallest = index;
+  if (left < bh->size &&
+      bh->nodes[left].priority < bh->nodes[smallest].priority) {
+    smallest = left;
+  }
+  if (right < bh->size &&
+      bh->nodes[right].priority < bh->nodes[smallest].priority) {
+    smallest = right;
+  }
+  if (smallest != index) {
+    swapHeapNodes(bh->nodes + index, bh->nodes + smallest);
+    heapify(bh, smallest);
+  }
+}
+
+void deleteHeap(BinaryHeap *bh, int index) {
+  if (index < 0 || index >= bh->size) {
+    return;
+  }
+  bh->nodes[index] = bh->nodes[bh->size - 1];
+  bh->size--;
+  heapify(bh, index);
+}
+
+LastCell *popHeap(BinaryHeap *bh) {
+  if (bh->size == 0)
+    return NULL;
+  LastCell *path = bh->nodes[0].path;
+  deleteHeap(bh, 0);
+  return path;
+}
+
+void insertHeap(BinaryHeap *bh, LastCell *path, int priority) {
+  if (bh->size == bh->capacity) {
+    bh->capacity *= 2;
+    bh->nodes = realloc(bh->nodes, sizeof(BinaryHeapNode) * bh->capacity);
+  }
+  BinaryHeapNode *node = bh->nodes + bh->size;
+  node->path = path;
+  node->priority = priority;
+  bh->size++;
+  int i = bh->size - 1;
+  while (i > 0) {
+    if (bh->nodes[(i - 1) / 2].priority <= bh->nodes[i].priority)
+      break;
+    swapHeapNodes(bh->nodes + i, bh->nodes + (i - 1) / 2);
+    i = (i - 1) / 2;
+  }
+}
+
 void dirdx(enum Direction dir, int *dx, int *dy) {
   switch (dir) {
   case UP:
@@ -192,7 +268,20 @@ void dirdx(enum Direction dir, int *dx, int *dy) {
     break;
   }
 }
-void nextMoves(Maze *maze, LastCell *cell, LinkedList *moves) {
+
+static int computePriority(Maze *maze, LastCell *cell) {
+  return cell->score + (maze->endX - cell->x) + (cell->y - maze->endY);
+}
+
+BinaryHeap *initializeHeap(Maze *maze) {
+  BinaryHeap *bh = createBinaryHeap();
+  LastCell *start = firstCell(maze->startX, maze->startY);
+  int priority = computePriority(maze, start);
+  insertHeap(bh, start, priority);
+  return bh;
+}
+
+void nextMoves(Maze *maze, LastCell *cell, BinaryHeap *moves) {
   int directions[3] = {cell->direction, (cell->direction + 1) % 4,
                        (cell->direction + 3) % 4};
   int dx, dy;
@@ -214,35 +303,22 @@ void nextMoves(Maze *maze, LastCell *cell, LinkedList *moves) {
     if (cell->previous != NULL)
       memcpy(newCell->previous, cell->previous, sizeof(int) * cell->n_previous);
     newCell->previous[cell->n_previous] = cell->x + cell->y * maze->nx;
-    push(moves, newCell);
+    int priority = computePriority(maze, newCell);
+    insertHeap(moves, newCell, priority);
     maze->visited[index] = 1;
   }
+  freeCell(cell);
 }
 
-LastCell *solveMaze(Maze *maze, LinkedList *moves) {
+LastCell *solveMaze(Maze *maze, BinaryHeap *moves) {
   struct Node *node;
   LastCell *cell = NULL;
   while (moves->size > 0) {
-    int best = INT_MAX;
-    int i = 0, ibest = 0;
-    node = moves->head;
-    while (node) {
-      cell = node->cell;
-      int score = cell->score + (maze->endX - cell->x) + (cell->y - maze->endY);
-      if (score < best) {
-        best = score;
-        ibest = i;
-      }
-      node = node->next;
-      i++;
-    }
-    cell = pop(moves, ibest);
+    cell = popHeap(moves);
     if (cell->x == maze->endX && cell->y == maze->endY) {
-      emptyList(moves);
       return cell;
     }
     nextMoves(maze, cell, moves);
-    freeCell(cell);
   }
 
   return NULL;
@@ -255,17 +331,17 @@ int findAllPaths(Maze *maze, LastCell *ref) {
     bestPathCell[ref->previous[i]] = 1;
   }
   bestPathCell[maze->endX + maze->endY * maze->nx] = 1;
-  LinkedList *moves = initList();
   LastCell *next, *end;
   for (int i = 1; i < ref->n_previous - 1; ++i) {
     resetVisited(maze);
+    BinaryHeap *moves = createBinaryHeap();
     nextMoves(maze, start, moves);
-    freeCell(start);
     // Check possible next moves
     for (int j = 0; j < moves->size; ++j) {
-      next = get(moves, j);
+      next = moves->nodes[j].path;
       if (next->x + next->y * maze->nx == ref->previous[i]) {
-        start = pop(moves, j);
+        start = next;
+        deleteHeap(moves, j);
         break;
       }
     }
@@ -279,12 +355,12 @@ int findAllPaths(Maze *maze, LastCell *ref) {
         bestPathCell[end->previous[j]] = 1;
       }
     }
+    freeBinaryHeap(moves);
   }
   int result = 0;
   for (int i = 0; i < maze->ny * maze->ny; ++i) {
     result += bestPathCell[i];
   }
-  freeList(moves);
   freeCell(start);
   freeCell(end);
   free(bestPathCell);

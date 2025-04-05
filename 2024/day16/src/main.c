@@ -16,9 +16,8 @@ int main(int argc, char *argv[]) {
   }
 
   // Part 1;
-  LastCell *start = firstCell(maze->startX, maze->startY);
-  LinkedList *moves = initList();
-  push(moves, start);
+
+  BinaryHeap *moves = initializeHeap(maze);
   LastCell *end = solveMaze(maze, moves);
   if (!end) {
     fprintf(stderr, "No solution found in part 1 :(\n");
@@ -31,7 +30,7 @@ int main(int argc, char *argv[]) {
 
   freeCell(end);
   freeMaze(maze);
-  freeList(moves);
+  freeBinaryHeap(moves);
 
   return EXIT_SUCCESS;
 }

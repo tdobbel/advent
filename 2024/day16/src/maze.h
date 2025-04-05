@@ -30,6 +30,16 @@ typedef struct LinkedList {
   struct Node *tail;
 } LinkedList;
 
+typedef struct {
+  LastCell *path;
+  int priority;
+} BinaryHeapNode;
+
+typedef struct {
+  int size, capacity;
+  BinaryHeapNode *nodes;
+} BinaryHeap;
+
 LastCell *firstCell(int startX, int startY);
 void freeCell(LastCell *cell);
 
@@ -42,12 +52,18 @@ void push(LinkedList *list, LastCell *cell);
 void emptyList(LinkedList *list);
 void freeList(LinkedList *list);
 
+BinaryHeap *createBinaryHeap();
+void freeBinaryHeap(BinaryHeap *bh);
+void insertHeap(BinaryHeap *bh, LastCell *path, int priority);
+void deleteHeap(BinaryHeap *bh, int index);
+
 Maze *readMaze(char *filename);
 void resetVisited(Maze *maze);
 void freeMaze(Maze *maze);
 void plotMaze(Maze *maze);
+BinaryHeap *initializeHeap(Maze *maze);
 
-LastCell *solveMaze(Maze *maze, LinkedList *moves);
+LastCell *solveMaze(Maze *maze, BinaryHeap *moves);
 int findAllPaths(Maze *maze, LastCell *ref);
 
 #endif
