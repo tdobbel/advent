@@ -1,4 +1,5 @@
 use anyhow::Result;
+use std::collections::BinaryHeap;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 
@@ -17,8 +18,10 @@ pub struct Maze {
     visited: Vec<Vec<bool>>,
 }
 
+#[derive(Clone)]
 pub struct Path {
     score: usize,
+    distance: usize,
     direction: Direction,
     positions: Vec<(usize, usize)>,
 }
@@ -30,6 +33,28 @@ impl Path {
 
     pub fn get_score(&self) -> usize {
         self.score
+    }
+}
+
+impl PartialEq for Path {
+    fn eq(&self, other: &Self) -> bool {
+        self.head() == other.head() && self.score == other.score
+    }
+}
+
+impl Eq for Path {}
+
+impl PartialOrd for Path {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for Path {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        let self_score = self.score + self.distance;
+        let other_score = other.score + other.distance;
+        other_score.cmp(&self_score)
     }
 }
 
@@ -68,11 +93,17 @@ impl Maze {
 
     pub fn first_cell(&self) -> Path {
         let positions = vec![self.start];
+        let distance = self.start.0.abs_diff(self.end.0) + self.start.1.abs_diff(self.end.1);
         Path {
             score: 0,
+            distance,
             direction: Direction::Right,
             positions,
         }
+    }
+
+    pub fn distance_to_end(&self, pos: (usize, usize)) -> usize {
+        pos.0.abs_diff(self.end.0) + pos.1.abs_diff(self.end.1)
     }
 
     fn shape(&self) -> (usize, usize) {
@@ -88,9 +119,10 @@ impl Maze {
     }
 }
 
+#[allow(dead_code)]
 fn compute_score(maze: &Maze, path: &Path) -> usize {
     let pos = path.head();
-    path.score + maze.end.0.abs_diff(pos.0) + maze.end.1.abs_diff(pos.1)
+    path.score + maze.distance_to_end(pos)
 }
 
 fn turn_right(dir: &Direction) -> Direction {
@@ -121,7 +153,7 @@ fn next_position(pos: (usize, usize), dir: &Direction) -> (usize, usize) {
     }
 }
 
-fn next_moves(maze: &mut Maze, path: &Path, paths: &mut Vec<Path>) {
+fn next_moves(maze: &mut Maze, path: &Path, paths: &mut BinaryHeap<Path>) {
     let directions = [
         path.direction.clone(),
         turn_right(&path.direction),
@@ -138,6 +170,7 @@ fn next_moves(maze: &mut Maze, path: &Path, paths: &mut Vec<Path>) {
         maze.visited[y][x] = true;
         paths.push(Path {
             score,
+            distance: maze.distance_to_end((x, y)),
             direction: dir.clone(),
             positions,
         });
@@ -146,31 +179,28 @@ fn next_moves(maze: &mut Maze, path: &Path, paths: &mut Vec<Path>) {
 
 pub fn solve_maze(
     maze: &mut Maze,
-    paths: &mut Vec<Path>,
+    paths: &mut BinaryHeap<Path>,
     max_score: Option<usize>,
 ) -> Option<Path> {
     while !paths.is_empty() {
-        let mut best_score = usize::MAX;
-        let mut ibest = 0;
-        for (i, path) in paths.iter().enumerate() {
-            let score = compute_score(maze, path);
-            if score < best_score {
-                best_score = score;
-                ibest = i;
-            }
-        }
+        let current = paths.pop().unwrap();
         if let Some(v_max) = max_score {
-            if best_score > v_max {
+            if current.score > v_max {
                 return None;
             }
         }
-        let best_path = paths.remove(ibest);
-        if best_path.head() == maze.end {
-            return Some(best_path);
+        if current.head() == maze.end {
+            return Some(current);
         }
-        next_moves(maze, &best_path, paths);
+        next_moves(maze, &current, paths);
     }
     None
+}
+
+fn set_best(best_cells: &mut [Vec<bool>], path: &[(usize, usize)]) {
+    for pos in path.iter() {
+        best_cells[pos.1][pos.0] = true;
+    }
 }
 
 pub fn find_all_best_paths(maze: &mut Maze, ref_path: &Path) -> usize {
@@ -179,32 +209,22 @@ pub fn find_all_best_paths(maze: &mut Maze, ref_path: &Path) -> usize {
     let ref_score = ref_path.get_score();
     let n = ref_path.positions.len();
     let mut best_cells = vec![vec![false; nx]; ny];
-    ref_path
-        .positions
-        .iter()
-        .for_each(|p| best_cells[p.1][p.0] = true);
-    let mut iremove = 0;
+    set_best(&mut best_cells, &ref_path.positions);
     for pos in ref_path.positions.iter().take(n - 2).skip(1) {
+        let mut paths: BinaryHeap<Path> = BinaryHeap::new();
         maze.reset_visited();
-        let mut paths: Vec<Path> = Vec::new();
         next_moves(maze, &start, &mut paths);
-        for (i, p) in paths.iter().enumerate() {
-            if p.head() == *pos {
-                iremove = i;
-                break;
-            }
-        }
-        start = paths.remove(iremove);
-        if paths.is_empty() {
+        let mut next = paths.into_vec();
+        let irm = next.iter().position(|p| p.head() == *pos).unwrap();
+        start = next.remove(irm);
+        if next.is_empty() {
             continue;
         }
+        paths = next.into();
         let (y, x) = start.head();
         maze.visited[y][x] = true;
         if let Some(new_path) = solve_maze(maze, &mut paths, Some(ref_score)) {
-            new_path
-                .positions
-                .iter()
-                .for_each(|p| best_cells[p.1][p.0] = true);
+            set_best(&mut best_cells, &new_path.positions);
         }
     }
     let mut result = 0;
