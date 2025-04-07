@@ -13,12 +13,11 @@ typedef struct {
 
 typedef struct {
   int n;
-  NameMap *nmap;
+  char **names;
   int **adjacency;
 } Network;
 
 NameMap *createNameMap(int capacity);
-void freeNameMap(NameMap *nm);
 
 IntVector *createIntVector(int capacity);
 void push(IntVector *v, int value);

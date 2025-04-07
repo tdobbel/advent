@@ -27,14 +27,6 @@ int getNameIndex(NameMap *nm, const char *name) {
   return nm->size - 1;
 }
 
-void freeNameMap(NameMap *nm) {
-  for (int i = 0; i < nm->size; i++) {
-    free(nm->names[i]);
-  }
-  free(nm->names);
-  free(nm);
-}
-
 IntVector *createIntVector(int capacity) {
   IntVector *v = malloc(sizeof(IntVector));
   v->size = 0;
@@ -85,10 +77,12 @@ Network *readNetwork(const char *filename) {
     push(pairs, j);
   }
   fclose(file);
+  nameMap->names = realloc(nameMap->names, nameMap->size * sizeof(char *));
 
   Network *network = malloc(sizeof(Network));
   network->n = nameMap->size;
-  network->nmap = nameMap;
+  network->names = nameMap->names;
+  nameMap->names = NULL;
 
   int *adj = calloc(sizeof(int), network->n * network->n);
   network->adjacency = malloc(network->n * sizeof(int *));
@@ -105,6 +99,7 @@ Network *readNetwork(const char *filename) {
   }
 
   freeIntVector(pairs);
+  free(nameMap);
 
   return network;
 }
@@ -112,7 +107,10 @@ Network *readNetwork(const char *filename) {
 void freeNetwork(Network *network) {
   free(network->adjacency[0]);
   free(network->adjacency);
-  freeNameMap(network->nmap);
+  for (int i = 0; i < network->n; i++) {
+    free(network->names[i]);
+  }
+  free(network->names);
   free(network);
 }
 
@@ -130,7 +128,7 @@ int countTriangles(Network *network) {
   int result = 0;
   IntVector *found = createIntVector(100);
   for (int i = 0; i < network->n; i++) {
-    char *name = network->nmap->names[i];
+    char *name = network->names[i];
     if (name[0] != 't')
       continue;
     for (int j = 0; j < network->n; j++) {
@@ -194,7 +192,7 @@ int findMaxClique(Network *network, char *clique) {
   char **nodenames = malloc(nmax * sizeof(char *));
   for (int i = 0; i < nmax; i++) {
     nodenames[i] = malloc(3 * sizeof(char));
-    strcpy(nodenames[i], network->nmap->names[nodes[start + i]]);
+    strcpy(nodenames[i], network->names[nodes[start + i]]);
   }
   qsort(nodenames, nmax, sizeof(char *), compareName);
   sprintf(clique, "%s", nodenames[0]);
