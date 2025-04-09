@@ -37,7 +37,7 @@ fn main() {
         let mut x = line.parse::<u64>().unwrap();
         let mut prev = ones_digit(x);
         let mut price;
-        let mut seq = Vec::<i32>::new();
+        let mut seq: Vec<i32> = Vec::with_capacity(4);
         let mut seq_price = HashMap::<Vec<i32>, i32>::new();
         for _ in 0..2000 {
             if seq.len() > 3 {
