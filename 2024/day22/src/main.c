@@ -111,6 +111,7 @@ void add_sequence_map(seq_map *sfrom, seq_map *sto) {
           sto->best_seq[k] = seq_to->numbers[k];
         }
       }
+      free(seq);
       seq = next;
     }
     sfrom->arr[i] = NULL;
