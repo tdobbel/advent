@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+
+rhs=()
+lhs=()
+declare -A counter
+while read -r left right; do
+    rhs+=("$right")
+    lhs+=("$left")
+    ((counter["$right"]++))
+done
+
+readarray -t sorted_lhs< <(printf "%s\n" "${lhs[@]}" | sort)
+sorted_rhs=($(printf "%s\n" "${rhs[@]}" | sort))
+n=${#lhs[@]}
+
+part1=0
+part2=0
+for ((i=0; i < n; i++)); do
+    diff=$((sorted_rhs[i] - sorted_lhs[i]))
+    abs_diff=${diff#-}
+    part1=$((part1 + abs_diff))
+    x="${sorted_lhs[i]}"
+    num=${counter["$x"]}
+    part2=$((part2 + x * num))
+done
+
+echo "Part 1: $part1"
+echo "Part 2: $part2"
