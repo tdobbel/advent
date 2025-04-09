@@ -2,7 +2,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#define CAPACITY 2039
+#define CAPACITY 7919
 
 struct node {
   int numbers[4];
