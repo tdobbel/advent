@@ -1,19 +1,19 @@
+use std::cmp::{max, min};
+use std::env;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
-use std::cmp::{max,min};
-use std::env;
 
 #[allow(dead_code)]
 fn ispossible(design: &str, patterns: &Vec<Vec<&str>>, nmax: &usize) -> bool {
     if design.is_empty() {
         return true;
     }
-    for n in 0..min(*nmax,design.len()) {
-        let part = &design[..n+1];
+    for n in 0..min(*nmax, design.len()) {
+        let part = &design[..n + 1];
         if !patterns[n].contains(&part) {
             continue;
         }
-        if ispossible(&design[n+1..], patterns, nmax) {
+        if ispossible(&design[n + 1..], patterns, nmax) {
             return true;
         }
     }
@@ -21,19 +21,24 @@ fn ispossible(design: &str, patterns: &Vec<Vec<&str>>, nmax: &usize) -> bool {
 }
 
 #[allow(dead_code)]
-fn find_all_ways(design: &str, patterns: &Vec<Vec<&str>>, nmax: &usize, prev: String, ways: &mut Vec<String>) {
+fn find_all_ways(
+    design: &str,
+    patterns: &Vec<Vec<&str>>,
+    nmax: &usize,
+    prev: String,
+    ways: &mut Vec<String>,
+) {
     if design.is_empty() {
         ways.push(prev);
-        return
+        return;
     }
-    for n in 1..min(*nmax+1,design.len()+1) {
+    for n in 1..min(*nmax + 1, design.len() + 1) {
         let part = &design[..n];
-        for towel in patterns[n-1].iter() {
+        for towel in patterns[n - 1].iter() {
             if part == *towel {
-                let seq: String = if prev.is_empty(){
+                let seq: String = if prev.is_empty() {
                     towel.to_string()
-                }
-                else {
+                } else {
                     format!("{},{}", prev, towel)
                 };
                 find_all_ways(&design[n..], patterns, nmax, seq, ways)
@@ -44,14 +49,16 @@ fn find_all_ways(design: &str, patterns: &Vec<Vec<&str>>, nmax: &usize, prev: St
 
 #[allow(dead_code)]
 fn ispossible_split(design: &str, patterns: &Vec<Vec<&str>>, nmax: &usize) -> bool {
-    if design.len() < 2*nmax {
+    if design.len() < 2 * nmax {
         return ispossible(design, patterns, nmax);
     }
     let mid = design.len() / 2;
-    let start = mid - nmax/2;
-    let stop = mid + nmax/2;
-    for pivot in start..stop+1 {
-        if ispossible_split(&design[..pivot], patterns, nmax) && ispossible_split(&design[pivot..], patterns, nmax) {
+    let start = mid - nmax / 2;
+    let stop = mid + nmax / 2;
+    for pivot in start..stop + 1 {
+        if ispossible_split(&design[..pivot], patterns, nmax)
+            && ispossible_split(&design[pivot..], patterns, nmax)
+        {
             return true;
         }
     }
@@ -61,21 +68,20 @@ fn ispossible_split(design: &str, patterns: &Vec<Vec<&str>>, nmax: &usize) -> bo
 fn count_possibilities(design: &str, patterns: &[Vec<&str>], nmax: &usize) -> u64 {
     let mut counter: Vec<u64> = vec![0; design.len()];
     for i in 0..design.len() {
-        let stop = i+1;
-        for j in 0..min(*nmax,i+1) {
-            let start = i-j;
-            if patterns[j].contains(&&design[start..stop]) {
-                if start > 0 {
-                    counter[i] += counter[start-1]
-                }
-                else {
-                    counter[i] += 1;
-                }
+        let stop = i + 1;
+        for j in 0..min(*nmax, i + 1) {
+            let start = i - j;
+            if !patterns[j].contains(&&design[start..stop]) {
+                continue;
+            }
+            if start > 0 {
+                counter[i] += counter[start - 1]
+            } else {
+                counter[i] += 1;
             }
         }
-
     }
-    counter[counter.len()-1]
+    counter[counter.len() - 1]
 }
 
 fn main() {
@@ -91,15 +97,19 @@ fn main() {
         nmax = max(nmax, towel.len());
     }
     let mut sorted_towels = Vec::<Vec<&str>>::new();
-    for n in 1..nmax+1 {
-        let selected = towels.clone().into_iter().filter(|&towel| towel.len() == n).collect::<Vec<&str>>();
+    for n in 1..nmax + 1 {
+        let selected = towels
+            .clone()
+            .into_iter()
+            .filter(|&towel| towel.len() == n)
+            .collect::<Vec<&str>>();
         sorted_towels.push(selected);
     }
     let mut n_possible = 0;
     let mut n_ways: u64 = 0;
     for line in lines {
         let line = line.unwrap();
-        if line.len() == 0 {
+        if line.is_empty() {
             continue;
         }
         //let possible = ispossible_split(&line, &sorted_towels, &nmax);
