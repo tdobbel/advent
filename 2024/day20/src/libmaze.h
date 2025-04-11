@@ -5,7 +5,6 @@ enum Direction { UP, RIGHT, DOWN, LEFT };
 
 typedef struct {
   int x, y;
-  int score;
   int n_previous;
   enum Direction direction;
   int *previous;
@@ -19,11 +18,6 @@ typedef struct {
   int *visited;
 } Maze;
 
-struct Node {
-  LastCell *cell;
-  struct Node *next;
-};
-
 typedef struct {
   LastCell *path;
   int priority;
@@ -36,8 +30,6 @@ typedef struct {
 
 LastCell *firstCell(int startX, int startY);
 void freeCell(LastCell *cell);
-
-struct Node *createNode(LastCell *cell);
 
 BinaryHeap *createBinaryHeap();
 void freeBinaryHeap(BinaryHeap *bh);

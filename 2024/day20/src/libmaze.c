@@ -73,7 +73,6 @@ LastCell *firstCell(int startX, int startY) {
   LastCell *cell = malloc(sizeof(LastCell));
   cell->x = startX;
   cell->y = startY;
-  cell->score = 0;
   cell->n_previous = 0;
   cell->direction = RIGHT;
   cell->previous = NULL;
@@ -84,13 +83,6 @@ void freeCell(LastCell *cell) {
   if (cell->previous != NULL)
     free(cell->previous);
   free(cell);
-}
-
-struct Node *createNode(LastCell *cell) {
-  struct Node *node = malloc(sizeof(struct Node));
-  node->cell = cell;
-  node->next = NULL;
-  return node;
 }
 
 BinaryHeap *createBinaryHeap() {
@@ -190,8 +182,13 @@ void dirdx(enum Direction dir, int *dx, int *dy) {
   }
 }
 
+static int distance(int x0, int y0, int x1, int y1) {
+  return abs(x0 - x1) + abs(y0 - y1);
+}
+
 static int computePriority(Maze *maze, LastCell *cell) {
-  return cell->score + (maze->endX - cell->x) + (cell->y - maze->endY);
+  return cell->n_previous + 1 +
+         distance(cell->x, cell->y, maze->endX, maze->endY);
 }
 
 BinaryHeap *initializeHeap(Maze *maze) {
@@ -217,7 +214,6 @@ void nextMoves(Maze *maze, LastCell *cell, BinaryHeap *moves) {
     LastCell *newCell = malloc(sizeof(LastCell));
     newCell->x = x;
     newCell->y = y;
-    newCell->score = cell->score + (i == 0 ? 1 : 1001);
     newCell->n_previous = cell->n_previous + 1;
     newCell->direction = directions[i];
     newCell->previous = (int *)malloc(sizeof(int) * (cell->n_previous + 1));
@@ -243,10 +239,6 @@ LastCell *solveMaze(Maze *maze, BinaryHeap *moves) {
   }
 
   return NULL;
-}
-
-int distance(int x0, int y0, int x1, int y1) {
-  return abs(x0 - x1) + abs(y0 - y1);
 }
 
 int countShortcuts(Maze *maze, LastCell *path, int minSave, int maxCheat) {
