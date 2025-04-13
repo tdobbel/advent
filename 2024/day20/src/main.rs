@@ -23,7 +23,7 @@ fn plot_path(path: &[(i32, i32)], walls: &[(i32, i32)], nx: i32, ny: i32) {
                 '^'
             }
         } else if a.0 < b.0 {
-                '>'
+            '>'
         } else {
             '<'
         };
@@ -166,7 +166,7 @@ fn main() {
     let mut closed = Vec::<(i32, i32)>::new();
     let path = find_shortest_path(&mut queue, &mut closed, &walls, end, nx, ny);
     let path = path.unwrap();
-    plot_path(&path, &walls, nx, ny);
+    // plot_path(&path, &walls, nx, ny);
     println!(
         "The program can complete the course un {} picoseconds",
         path.len() - 1
