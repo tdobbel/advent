@@ -7,6 +7,7 @@ fn distance(a: &(i32, i32), b: &(i32, i32)) -> i32 {
     (a.0 - b.0).abs() + (a.1 - b.1).abs()
 }
 
+#[allow(dead_code)]
 fn plot_path(path: &[(i32, i32)], n: &i32, corrupted: &[(i32, i32)]) {
     let mut symbols = HashMap::<(i32, i32), char>::new();
     for i in 0..path.len() - 1 {
@@ -134,7 +135,7 @@ fn main() {
     let mut queue = vec![path];
     let path = find_shortest_path(&mut queue, &n, corrupted, &mut closed);
     let path = path.unwrap();
-    plot_path(&path, &n, corrupted);
+    // plot_path(&path, &n, corrupted);
     println!("Part 1: {} steps needed to get to the exit", path.len() - 1);
     let mut start = n_sel;
     let mut stop = n_byte;
