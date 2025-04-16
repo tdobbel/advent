@@ -18,11 +18,6 @@ typedef struct {
 } set_t;
 
 typedef struct {
-  struct node_t *head;
-  struct node_t *tail;
-} vector_t;
-
-typedef struct {
   int nx, ny;
   char **grid;
 } contraption_t;
