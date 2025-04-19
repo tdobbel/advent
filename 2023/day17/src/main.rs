@@ -1,141 +1,143 @@
-use std::collections::HashSet;
+use anyhow::Result;
+use std::cmp::Ordering;
+use std::collections::{BinaryHeap, HashSet};
 use std::env;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 
-#[derive(Debug,Eq,PartialEq,Clone,Hash)]
+#[derive(Eq, PartialEq)]
 enum Direction {
     Up,
+    Right,
     Down,
     Left,
-    Right,
 }
 
 impl Direction {
-    const VALUES: [Direction; 4] = [Direction::Up, Direction::Down, Direction::Left, Direction::Right];
+    const VALUES: [Direction; 4] = [
+        Direction::Up,
+        Direction::Right,
+        Direction::Down,
+        Direction::Left,
+    ];
 }
 
-trait Status {
-    fn get_status(&self) -> ((usize, usize), Direction, usize);
-}
-
-#[derive(Debug)]
-struct State {
-    tile: (usize, usize),
-    direction: Direction,
+#[derive(Eq, PartialEq)]
+struct Crucible {
+    block: (usize, usize),
+    direction: usize,
     counter: usize,
     total: usize,
+    distance: usize,
 }
 
-impl Status for State {
-    fn get_status(&self) -> ((usize, usize), Direction, usize) {
-        (self.tile, self.direction.clone(), self.counter)
+type State = ((usize, usize), usize, usize);
+
+impl PartialOrd for Crucible {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for Crucible {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        let self_score = self.total + self.distance;
+        let other_score = other.total + other.distance;
+        other_score.cmp(&self_score)
     }
 }
 
 fn distance(a: &(usize, usize), b: &(usize, usize)) -> usize {
-    let dx =  if a.0 > b.0 {a.0 - b.0} else {b.0 - a.0};
-    let dy = if a.1 > b.1 {a.1 - b.1} else {b.1 - a.1};
-    dx + dy
+    a.0.abs_diff(b.0) + a.1.abs_diff(b.1)
 }
 
-#[allow(dead_code)]
-fn plot_path(grid: &[Vec<usize>], path: &[(usize,usize)]) {
-    for (i,row) in grid.iter().enumerate() {
-        for (j,value) in row.iter().enumerate() {
-            if path.contains(&(i ,j)) {
-                print!("·");
-            } else {
-                print!("{}", value);
-            }
-        }
-        println!();
-    }
-}
-
-fn opposite_direction(dir_from: &Direction) -> Direction {
-    match dir_from {
-        Direction::Up => Direction::Down,
-        Direction::Down => Direction::Up,
-        Direction::Left => Direction::Right,
-        Direction::Right => Direction::Left,
-    }
-}
-
-fn next_pos(state: &State, grid: &[Vec<usize>]) -> Option<(usize,usize)> {
-    let (y, x) = state.tile;
-    let (y_, x_) = match state.direction {
-        Direction::Up => (usize::checked_sub(y, 1)?, x),
-        Direction::Down => (y+1, x),
-        Direction::Left => (y, usize::checked_sub(x, 1)?),
-        Direction::Right => (y, x+1)
+fn next_pos(state: &Crucible, direction: &Direction) -> Option<(usize, usize)> {
+    let (x, y) = state.block;
+    let (x_new, y_new) = match *direction {
+        Direction::Up => (x, y.checked_sub(1)?),
+        Direction::Right => (x + 1, y),
+        Direction::Down => (x, y + 1),
+        Direction::Left => (x.checked_sub(1)?, y),
     };
-    if y_ >= grid.len() || x_ >= grid[0].len() {
-        return None
-    }
-    Some((y_, x_))
+    Some((x_new, y_new))
 }
 
-fn find_shortest_path(
-    grid: &[Vec<usize>],
-    min_blocks: usize,
-    max_blocks: usize,
-) -> Option<usize> {
-    let mut queue: Vec<State> = vec![
-        State {tile: (0, 0), direction: Direction::Right, counter: 1, total: 0},
-        State {tile: (0, 0), direction: Direction::Down, counter: 1, total: 0},
-    ];
-    let mut closed: HashSet<((usize,usize), Direction, usize)> = HashSet::new();
-    let end = (grid.len() - 1, grid[0].len() - 1);
+fn find_shortest_path(grid: &[Vec<usize>], min_blocks: usize, max_blocks: usize) -> Option<usize> {
+    let nx = grid[0].len();
+    let ny = grid.len();
+    let end = (nx - 1, ny - 1);
+    let mut queue = BinaryHeap::<Crucible>::new();
+    let start = Crucible {
+        block: (0, 0),
+        direction: 1,
+        counter: 0,
+        total: 0,
+        distance: distance(&(0, 0), &end),
+    };
+    queue.push(start);
+    let mut visited = HashSet::<State>::new();
     while !queue.is_empty() {
-        let state = queue.remove(0);
-        closed.insert(state.get_status());
-        let (y, x) =  match next_pos(&state, grid) {
-            Some(pos) => pos,
-            None => continue,
-        };
-        let total_ = state.total + grid[y][x];
-        if (y, x) == end && state.counter >= min_blocks {
-            return Some(total_);
+        let current = queue.pop().unwrap();
+        if current.block == end {
+            return Some(current.total);
         }
-        for direction in Direction::VALUES.iter() {
-            if direction == &opposite_direction(&state.direction) {
+        visited.insert((current.block, current.direction, current.counter));
+        let direction_indices = [
+            (current.direction + 3) % 4,
+            current.direction,
+            (current.direction + 1) % 4,
+        ];
+        for idir in direction_indices {
+            if current.direction != idir && current.counter > 0 && current.counter < min_blocks {
                 continue;
             }
-            let counter_ = if direction == &state.direction { state.counter + 1 } else { 1 };
-            if counter_ > max_blocks {
-                continue
+            let counter = if idir == current.direction {
+                current.counter + 1
+            } else {
+                1
+            };
+            if counter > max_blocks {
+                continue;
             }
-            if state.counter < min_blocks && direction != &state.direction {
-                continue
+            let (x, y) = match next_pos(&current, &Direction::VALUES[idir]) {
+                Some(pos) => pos,
+                None => continue,
+            };
+            if x >= nx || y >= ny {
+                continue;
             }
-            if !closed.contains(&((y,x), direction.to_owned(), counter_)) {
-                queue.push(State {
-                    tile: (y, x),
-                    direction: direction.to_owned(),
-                    counter: counter_,
-                    total: total_,
-                });
+            if !visited.insert(((x, y), idir, counter)) {
+                continue;
             }
+            let next = Crucible {
+                block: (x, y),
+                direction: idir,
+                counter,
+                total: current.total + grid[y][x],
+                distance: distance(&(x, y), &end),
+            };
+            queue.push(next);
         }
-        queue.retain(|state| !closed.contains(&state.get_status()));
-        queue.sort_by_key(|state| state.total + distance(&state.tile, &end));
     }
     None
 }
 
-fn main() {
+fn main() -> Result<()> {
     let args = env::args().nth(1).expect("Please provide an input file");
-    let file = File::open(args).unwrap();
+    let file = File::open(args)?;
     let reader = BufReader::new(file);
     let mut grid: Vec<Vec<usize>> = Vec::new();
     for line in reader.lines() {
         let line = line.unwrap();
-        let row = line.chars().map(|c| c.to_digit(10).unwrap() as usize).collect();
+        let row = line
+            .chars()
+            .map(|c| c.to_digit(10).unwrap() as usize)
+            .collect();
         grid.push(row);
     }
     let part1 = find_shortest_path(&grid, 1, 3).unwrap();
     println!("Part 1: {}", part1);
     let part2 = find_shortest_path(&grid, 4, 10).unwrap();
     println!("Part 2: {}", part2);
+    Ok(())
 }
