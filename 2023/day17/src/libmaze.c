@@ -1,10 +1,13 @@
 #include "libmaze.h"
 #include <limits.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
 #define BUFFER_SIZE 256
+#define FNV_OFFSET 14695981039346656037UL
+#define FNV_PRIME 1099511628211UL
 
 city_t *city_from_file(char *filename) {
   FILE *file = fopen(filename, "r");
@@ -141,18 +144,20 @@ void hash_set_free(hash_set_t *set) {
   free(set);
 }
 
-static int hash(int capacity, int x, int y, int counter, enum Direction dir) {
+static int hash_key(int capacity, int x, int y, int counter,
+                    enum Direction dir) {
   int values[4] = {x, y, counter, dir};
-  int index = 0, factor = 31;
+  uint64_t hash = FNV_OFFSET;
   for (int i = 0; i < 4; ++i) {
-    index = (index + values[i] * factor) % capacity;
+    hash ^= values[i];
+    hash *= FNV_PRIME;
   }
-  return index;
+  return (int)(hash & (uint64_t)(capacity - 1));
 }
 
 int hash_set_insert(hash_set_t *set, int x, int y, int counter,
                     enum Direction dir) {
-  int index = hash(set->capacity, x, y, counter, dir);
+  int index = hash_key(set->capacity, x, y, counter, dir);
   struct hash_set_node_t *node = set->table[index];
   struct hash_set_node_t *prev = NULL;
   while (node) {
@@ -249,7 +254,7 @@ int find_shortest_path(city_t *city, int min_blocks, int max_blocks) {
   start->score = 0;
   binary_heap_t *queue = binary_heap_create();
   binary_heap_insert(queue, start, distance(0, 0, x_end, y_end));
-  hash_set_t *visited = hash_set_create(2551);
+  hash_set_t *visited = hash_set_create(7919);
   int result = -1;
   while (queue->size > 0) {
     state_t *state = binary_heap_pop(queue);
