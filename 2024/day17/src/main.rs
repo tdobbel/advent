@@ -90,12 +90,10 @@ fn part2(program: &Vec<char>, prev: u64, n: usize) -> Option<u64> {
             execute_program(program, &mut register, &mut op_pointer, &mut output);
         }
         let value = output.pop().unwrap();
-        if value == program[n - 1] {
-            let result = part2(program, a, n - 1);
-            match result {
-                Some(_) => return result,
-                None => continue,
-            }
+        if value != program[n - 1] {
+            continue;
+        } else if let Some(v) = part2(program, a, n - 1) {
+            return Some(v);
         }
     }
     None
