@@ -110,7 +110,14 @@ void *hash_map_get_or_default(hash_map_t *map, void *key) {
     return result;
   }
   uint64_t default_value = 0;
-  hash_map_insert(map, key, &default_value);
+  switch (map->node_type) {
+  case Pair:
+    hash_map_insert(map, key, NULL);
+    break;
+  case Uint:
+    hash_map_insert(map, key, &default_value);
+    break;
+  }
   return hash_map_get(map, key);
 }
 
