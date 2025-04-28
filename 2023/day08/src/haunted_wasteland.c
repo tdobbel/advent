@@ -19,11 +19,7 @@ hash_map_t *hash_map_create(int capacity, enum NodeType data_type) {
   map->n_entry = 0;
   map->capacity = capacity;
   map->node_type = data_type;
-  if (data_type == Pair) {
-    map->table = malloc(sizeof(struct hm_pair_node_t *) * capacity);
-  } else {
-    map->table = malloc(sizeof(struct hm_uint_node_t *) * capacity);
-  }
+  map->table = malloc(sizeof(struct hm_node_t *) * capacity);
   for (int i = 0; i < capacity; ++i) {
     map->table[i] = NULL;
   }
