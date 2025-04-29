@@ -142,18 +142,17 @@ pub fn compare_hand(hand: &Hand, other: &Hand, use_joker: bool) -> cmp::Ordering
 
 pub fn compute_strength(counter: &[(Card, usize)]) -> HandType {
     let n1 = counter[0].1;
-    let n2 = if counter.len() > 1 {
-        Some(counter[1].1)
-    } else {
-        None
+    let n2 = match counter.iter().nth(1) {
+        Some((_, n)) => *n,
+        None => 0,
     };
     match (n1, n2) {
-        (5, _) => HandType::FiveOfAKind,
-        (4, Some(1)) => HandType::FourOfAKind,
-        (3, Some(2)) => HandType::FullHouse,
-        (3, Some(1)) => HandType::ThreeOfAKind,
-        (2, Some(2)) => HandType::TwoPair,
-        (2, Some(1)) => HandType::OnePair,
+        (5, 0) => HandType::FiveOfAKind,
+        (4, 1) => HandType::FourOfAKind,
+        (3, 2) => HandType::FullHouse,
+        (3, 1) => HandType::ThreeOfAKind,
+        (2, 2) => HandType::TwoPair,
+        (2, 1) => HandType::OnePair,
         _ => HandType::HighCard,
     }
 }
