@@ -161,16 +161,13 @@ pub fn compute_strength(counter: &[(Card, usize)]) -> HandType {
 pub fn count_cards(cards: &[Card]) -> Vec<(Card, usize)> {
     let mut result: Vec<(Card, usize)> = Vec::with_capacity(5);
     for card in cards.iter() {
-        let mut found = false;
-        for (crd, cnt) in result.iter_mut() {
-            if card == crd {
-                *cnt += 1;
-                found = true;
-                break;
+        match result.iter().position(|x| x.0 == *card) {
+            Some(i) => {
+                result[i].1 += 1;
             }
-        }
-        if !found {
-            result.push((card.clone(), 1));
+            None => {
+                result.push((card.clone(), 1));
+            }
         }
     }
     result.sort_by(|a, b| b.1.cmp(&a.1));
