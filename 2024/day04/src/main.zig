@@ -49,7 +49,7 @@ pub fn isCrossMax(grid: std.ArrayList([]u8), x: usize, y: usize) bool {
         diag2[k] = grid.items[y + k][x + 2 - k];
     }
     return isMAS(diag1) and isMAS(diag2);
-} 
+}
 
 pub fn main() !void {
     if (std.os.argv.len != 2) {
@@ -66,7 +66,9 @@ pub fn main() !void {
     var grid = std.ArrayList([]u8).init(allocator);
     defer grid.deinit();
     while (try in_stream.readUntilDelimiterOrEof(&buffer, '\n')) |line| {
-        try grid.append(try allocator.dupe(u8, line));
+        const line_copy = try allocator.dupe(u8, line);
+        errdefer allocator.free(line_copy);
+        try grid.append(line_copy);
     }
     var part1: u32 = 0;
     var part2: u32 = 0;
