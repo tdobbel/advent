@@ -61,7 +61,7 @@ pub fn main() !void {
     var buffer: [1024]u8 = undefined;
     var buf_reader = std.io.bufferedReader(file.reader());
     var in_stream = buf_reader.reader();
-    const allocator = std.heap.page_allocator;
+    const allocator = std.heap.c_allocator;
     var isLargerThan = orderMap.init(allocator);
     defer isLargerThan.deinit();
     var numbers: [64]u32 = undefined;
@@ -89,4 +89,9 @@ pub fn main() !void {
     }
     std.debug.print("Part 1: {}\n", .{part1});
     std.debug.print("Part 2: {}\n", .{part2});
+
+    var it = isLargerThan.iterator();
+    while (it.next()) |entry| {
+        entry.value_ptr.deinit();
+    }
 }

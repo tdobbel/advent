@@ -62,7 +62,7 @@ pub fn main() !void {
     var buffer: [1024]u8 = undefined;
     var buf_reader = std.io.bufferedReader(file.reader());
     var in_stream = buf_reader.reader();
-    const allocator = std.heap.page_allocator;
+    const allocator = std.heap.c_allocator;
     var grid = std.ArrayList([]u8).init(allocator);
     defer grid.deinit();
     while (try in_stream.readUntilDelimiterOrEof(&buffer, '\n')) |line| {
@@ -80,4 +80,8 @@ pub fn main() !void {
     }
     std.debug.print("Part 1: {}\n", .{part1});
     std.debug.print("Part 2: {}\n", .{part2});
+
+    for (grid.items) |line| {
+        allocator.free(line);
+    }
 }

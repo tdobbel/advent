@@ -1,6 +1,7 @@
 const std = @import("std");
 
 const PositionError = error{OutsideBounds};
+const allocator = std.heap.c_allocator;
 
 const Direction = enum {
     Up,
@@ -43,7 +44,7 @@ pub fn nextPosition(pos: *Position, nx: usize, ny: usize) PositionError!struct {
 pub fn moveGuard(guard: *Position, obstacles: std.ArrayList([]bool), visited: []bool, nVisited: *usize) !bool {
     const ny = obstacles.items.len;
     const nx = obstacles.items[0].len;
-    var history = std.AutoHashMap(Position, void).init(std.heap.page_allocator);
+    var history = std.AutoHashMap(Position, void).init(allocator);
     defer history.deinit();
     nVisited.* = 0;
     while (true) {
@@ -79,7 +80,6 @@ pub fn main() !void {
     const file = try cwd.openFile(file_name, .{});
     defer file.close();
 
-    const allocator = std.heap.page_allocator;
     var obstacles = std.ArrayList([]bool).init(allocator);
     defer obstacles.deinit();
 
@@ -138,4 +138,8 @@ pub fn main() !void {
         obstacles.items[y][x] = false;
     }
     std.debug.print("Part 2: {}\n", .{part2});
+
+    for (obstacles.items) |row| {
+        allocator.free(row);
+    }
 }

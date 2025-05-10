@@ -1,7 +1,7 @@
 const std = @import("std");
 
 const AntennaMap = std.AutoHashMap(u8, std.ArrayList(usize));
-const allocator = std.heap.page_allocator;
+const allocator = std.heap.c_allocator;
 
 pub fn validIndex(x: i32, y: i32, nx: usize, ny: usize, index: *usize) bool {
     const inx: i32 = @intCast(nx);
@@ -108,4 +108,9 @@ pub fn main() !void {
     std.debug.print("Part 1: {}\n", .{part1});
     const part2 = try antinodes2(&antennas, @intCast(nx), @intCast(ny));
     std.debug.print("Part 2: {}\n", .{part2});
+
+    var it = antennas.iterator();
+    while (it.next()) |entry| {
+        entry.value_ptr.deinit();
+    }
 }
