@@ -4,11 +4,6 @@ const allocator = std.heap.c_allocator;
 const AdjacencyList = std.AutoHashMap(usize, std.ArrayList(usize));
 const TriangleSet = std.AutoHashMap([3]usize, void);
 
-const Pair = struct {
-    node1: [2]u8,
-    node2: [2]u8,
-};
-
 const Network = struct {
     n_node: usize,
     nodes: [][2]u8,
@@ -32,21 +27,13 @@ pub fn add_to_key(adj: *AdjacencyList, key: usize, value: usize) !void {
     try entry.value_ptr.append(value);
 }
 
-pub fn create_network(node_map: *std.AutoHashMap([2]u8, usize), edges: *std.ArrayList(Pair)) !Network {
+pub fn create_network(node_map: *std.AutoHashMap([2]u8, usize), adj: AdjacencyList) !Network {
     defer node_map.deinit();
-    defer edges.deinit();
     const n = node_map.count();
     var nodes = try allocator.alloc([2]u8, n);
     var it = node_map.iterator();
     while (it.next()) |entry| {
         nodes[entry.value_ptr.*] = entry.key_ptr.*;
-    }
-    var adj = AdjacencyList.init(allocator);
-    for (edges.items) |edge| {
-        const node1 = node_map.get(edge.node1).?;
-        const node2 = node_map.get(edge.node2).?;
-        try add_to_key(&adj, node1, node2);
-        try add_to_key(&adj, node2, node1);
     }
     return Network{
         .n_node = n,
@@ -152,25 +139,27 @@ pub fn main() !void {
     var buffer: [5096]u8 = undefined;
     var buf_reader = std.io.bufferedReader(file.reader());
     var in_stream = buf_reader.reader();
-    var edges = std.ArrayList(Pair).init(allocator);
+
     var node_map = std.AutoHashMap([2]u8, usize).init(allocator);
+    var adj = AdjacencyList.init(allocator);
     var cntr: usize = 0;
     while (try in_stream.readUntilDelimiterOrEof(&buffer, '\n')) |line| {
-        const edge = Pair{
-            .node1 = [_]u8{ line[0], line[1] },
-            .node2 = [_]u8{ line[3], line[4] },
-        };
-        try edges.append(edge);
-        if (!node_map.contains(edge.node1)) {
-            try node_map.put(edge.node1, cntr);
+        const node1 = [_]u8{ line[0], line[1] };
+        const node2 = [_]u8{ line[3], line[4] };
+        if (!node_map.contains(node1)) {
+            try node_map.put(node1, cntr);
             cntr += 1;
         }
-        if (!node_map.contains(edge.node2)) {
-            try node_map.put(edge.node2, cntr);
+        if (!node_map.contains(node2)) {
+            try node_map.put(node2, cntr);
             cntr += 1;
         }
+        const i = node_map.get(node1).?;
+        const j = node_map.get(node2).?;
+        try add_to_key(&adj, i, j);
+        try add_to_key(&adj, j, i);
     }
-    var network = try create_network(&node_map, &edges);
+    var network = try create_network(&node_map, adj);
     defer network.free();
 
     var triangles = TriangleSet.init(allocator);
