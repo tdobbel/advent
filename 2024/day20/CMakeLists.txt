@@ -20,6 +20,7 @@ if (MSVC)
     target_compile_options(${EXEC_NAME} PRIVATE "/W2")
 endif()
 
+target_compile_options(${EXEC_NAME} PRIVATE -O3 -Wall -Wextra -pedantic)
 target_compile_definitions(${EXEC_NAME} PRIVATE graphic)
 
 # add a custom target so we can do make run directly

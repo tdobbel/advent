@@ -57,9 +57,7 @@ pub fn create_network(node_map: *std.AutoHashMap([2]u8, usize), edges: *std.Arra
 
 pub fn contains(comptime T: anytype, arr: []T, value: T) bool {
     for (arr) |item| {
-        if (item == value) {
-            return true;
-        }
+        if (item == value) return true;
     }
     return false;
 }

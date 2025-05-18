@@ -119,7 +119,12 @@ int main(int argc, char *argv[]) {
   char buffer[BUFFER_SIZE];
 
   // Read the first line and parse the towels
-  fgets(buffer, BUFFER_SIZE, file);
+  char *ptr = fgets(buffer, BUFFER_SIZE, file);
+  if (ptr == NULL) {
+    perror("Could not parse towels");
+    fclose(file);
+    return EXIT_FAILURE;
+  }
   int n = strcspn(buffer, "\n");
   char towel[CAPACITY];
   towels_t *towels = create_towels();

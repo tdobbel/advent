@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+
+declare -A lexec
+
+lexec["Python"]="./day06.py"
+lexec["Rust"]="./target/release/day06"
+lexec["Go"]="./goday06"
+lexec["C"]="./day06"
+lexec["Zig"]="./run06"
+
+for lang in "${!lexec[@]}"; do
+    echo "-- $lang --"
+    time "${lexec[$lang]}" input
+done

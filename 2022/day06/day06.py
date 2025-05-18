@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 import sys
 
 def find_start_of_packet(line: str, size: int) -> int:

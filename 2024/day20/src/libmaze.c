@@ -13,7 +13,7 @@ Maze *readMaze(char *filename) {
     return NULL;
   }
   char buffer[BUFFER_SIZE];
-  int ny = 0, nx;
+  int ny = 0, nx = 0;
   Maze *maze = malloc(sizeof(Maze));
   maze->walls = (int *)calloc(sizeof(int), BUFFER_SIZE * BUFFER_SIZE);
   while (fgets(buffer, sizeof(buffer), file)) {
@@ -202,7 +202,7 @@ BinaryHeap *initializeHeap(Maze *maze) {
 void nextMoves(Maze *maze, LastCell *cell, BinaryHeap *moves) {
   int directions[3] = {cell->direction, (cell->direction + 1) % 4,
                        (cell->direction + 3) % 4};
-  int dx, dy;
+  int dx = 0, dy = 0;
   for (int i = 0; i < 3; ++i) {
     dirdx(directions[i], &dx, &dy);
     int x = cell->x + dx;
@@ -228,7 +228,6 @@ void nextMoves(Maze *maze, LastCell *cell, BinaryHeap *moves) {
 }
 
 LastCell *solveMaze(Maze *maze, BinaryHeap *moves) {
-  struct Node *node;
   LastCell *cell = NULL;
   while (moves->size > 0) {
     cell = popHeap(moves);

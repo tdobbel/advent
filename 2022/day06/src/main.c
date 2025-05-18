@@ -40,10 +40,15 @@ int main(int argc, char *argv[]) {
   }
   FILE *file = fopen(argv[1], "r");
   char line[MAX_LINE_LENGTH];
-  fgets(line, MAX_LINE_LENGTH, file);
+  char *ptr = fgets(line, MAX_LINE_LENGTH, file);
+  if (ptr == NULL) {
+    perror("Error reading file");
+    fclose(file);
+    return EXIT_FAILURE;
+  }
   fclose(file);
   size_t line_size = strcspn(line, "\n");
   printf("Part 1: %d\n", solve(line, line_size, 4));
   printf("Part 2: %d\n", solve(line, line_size, 14));
-  return 0;
+  return EXIT_SUCCESS;
 }
