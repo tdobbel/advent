@@ -1,0 +1,91 @@
+#!/usr/bin/env bash
+
+
+nx=0
+ny=0
+
+declare -A antenna
+declare -A antinodes1
+declare -A antinodes2
+
+while read -r line; do
+    nx=${#line}
+    for (( x=0; x<nx; x++ )); do
+        c="${line:$x:1}"
+        if [[ "$c" == "." ]]; then continue; fi
+        points="${antenna[$c]}"
+        if [[ -z "$points" ]]; then
+            antenna["$c"]="$x,$ny"
+        else
+            antenna["$c"]="${antenna[$c]}:$x,$ny"
+        fi
+    done
+    ((ny++))
+done
+
+for ((x=0; x<nx; x++)); do
+    for ((y=0; y<ny; y++)); do
+        antinodes1["$x,$y"]=false
+        antinodes2["$x,$y"]=false
+    done
+done
+
+for key in "${!antenna[@]}"; do
+    IFS=":" read -ra points <<< "${antenna[$key]}"
+    n=${#points[@]}
+    for ((i=0; i<n-1; i++)); do
+        IFS="," read -r xa ya <<< "${points[$i]}"
+        for ((j=i+1; j<n; j++)); do
+            IFS="," read -r xb yb <<< "${points[$j]}"
+            dx=$((xb - xa))
+            dy=$((yb - ya))
+            x=$((xb + dx))
+            y=$((yb + dy))
+            if (( x >= 0 && x < nx && y >= 0 && y < ny )); then
+                antinodes1["$x,$y"]=true
+            fi
+            x=$xb
+            y=$yb
+            while true; do
+                antinodes2["$x,$y"]=true
+                x=$((x + dx))
+                y=$((y + dy))
+                if (( x < 0 || x >= nx || y < 0 || y >= ny )); then
+                    break
+                fi
+            done
+            x=$((xa - dx))
+            y=$((ya - dy))
+            if (( x >= 0 && x < nx && y >= 0 && y < ny )); then
+                antinodes1["$x,$y"]=true
+            fi
+            x=$xa
+            y=$ya
+            while true; do
+                antinodes2["$x,$y"]=true
+                x=$((x - dx))
+                y=$((y - dy))
+                if (( x < 0 || x >= nx || y < 0 || y >= ny )); then
+                    break
+                fi
+            done
+        done
+    done
+done
+
+part1=0
+part2=0
+for ((x=0; x<nx; x++)); do
+    for ((y=0; y<ny; y++)); do
+        if ${antinodes1["$x,$y"]}; then
+            ((part1++))
+        fi
+        if ${antinodes2["$x,$y"]}; then
+            ((part2++))
+        fi
+    done
+done
+
+echo "Part 1: $part1"
+echo "Part 2: $part2"
+
