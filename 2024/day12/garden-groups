@@ -1,0 +1,145 @@
+#!/usr/bin/env bash
+
+
+declare -A plots
+declare -A visited
+declare -a measures
+declare -a fences
+
+directions=("UP" "RIGHT" "DOWN" "LEFT")
+
+nx=0
+ny=0
+while read -r line; do
+    nx=${#line}
+    for ((x=0; x<nx; x++)); do
+        key="$x,$ny"
+        plots[$key]="${line:$x:1}"
+        visited[$key]=false
+    done
+    ((ny++))
+done
+
+shift() {
+    local x=$1
+    local y=$2
+    local dir=$3
+    case $dir in
+        "UP") echo "$x,$((y-1))" ;;
+        "RIGHT") echo "$((x+1)),$y" ;;
+        "DOWN") echo "$x,$((y+1))" ;;
+        "LEFT") echo "$((x-1)),$y" ;;
+    esac
+}
+
+fence() {
+    local x=$1
+    local y=$2
+    local dir=$3
+    case $dir in
+        "UP") echo "$((x+1)),$y,$x,$y" ;;
+        "LEFT") echo "$x,$y,$x,$((y+1))" ;;
+        "DOWN") echo "$x,$((y+1)),$((x+1)),$((y+1))" ;;
+        "RIGHT") echo "$((x+1)),$((y+1)),$((x+1)),$y" ;;
+    esac
+}
+
+count_corners() {
+    local ifirst=0
+    local icurr=0
+    local count=0
+    local n=${#fences[@]}
+    while ((icurr < n)); do
+        IFS="," read -r xa ya xb yb <<< "${fences[icurr]}"
+        IFS="," read -r xc yc xd yd <<< "${fences[ifirst]}"
+        if ((xb == xc && yb == yc)); then
+            local ua=$((xb - xa))
+            local va=$((yb - ya))
+            local ub=$((xd - xc))
+            local vb=$((yd - yc))
+            if ((ua != ub || va != vb)); then
+                ((count++))
+            fi
+            ifirst=$((icurr + 1))
+            icurr=$ifirst
+            continue
+        fi
+        for ((i=(icurr+1); i<n; i++)); do
+            IFS="," read xc yc xd yd <<< "${fences[i]}"
+            if ((xb == xc && yb == yc)); then
+                local ua=$((xb - xa))
+                local va=$((yb - ya))
+                local ub=$((xd - xc))
+                local vb=$((yd - yc))
+                if ((ua != ub || va != vb)); then
+                    ((count++))
+                fi
+                local j=$((icurr + 1))
+                local tmp=${fences[$j]}
+                fences[$j]=${fences[i]}
+                fences[$i]=$tmp
+                ((icurr++))
+                break
+            fi
+        done
+    done
+    echo "$count"
+}
+
+area_perimeter() {
+    local pos=$1
+    local crop=${plots[$pos]}
+    local area=0
+    local perimeter=0
+    local queue=("$pos")
+    visited[$pos]=true
+    fences=()
+    while ((${#queue[@]} > 0)); do
+        pos=${queue[0]}
+        queue=(${queue[@]:1})
+        ((area++))
+        IFS="," read -r xloc yloc <<< "$pos"
+        for dir in "${directions[@]}"; do
+            local key=$(shift "$xloc" "$yloc" "$dir") 
+            IFS="," read -r x_new y_new <<< "$key"
+            if (( x_new < 0 || x_new >= nx || y_new < 0 || y_new >= ny)); then 
+                ((perimeter++))
+                fences+=("$(fence "$xloc" "$yloc" "$dir")")
+                continue
+            fi
+            local other_crop=${plots[$key]}
+            if [[ "$other_crop" != "$crop" ]]; then
+                ((perimeter++))
+                fences+=("$(fence "$xloc" "$yloc" "$dir")")
+                continue
+            fi
+            if ${visited[$key]}; then
+                continue
+            fi
+            queue+=("$key")
+            visited[$key]=true
+        done
+    done
+    local crnrs=$(count_corners)
+    measures+=("$area,$perimeter,$crnrs")
+}
+
+for ((y=0; y<ny; y++)); do
+    echo "Processing row $((y+1))/$ny"
+    for ((x=0; x<nx; x++)); do
+        key="$x,$y"
+        if ${visited[$key]}; then continue; fi
+        area_perimeter $key
+    done
+done
+
+part1=0
+part2=0
+for entry in ${measures[@]}; do
+    IFS="," read -r area perimeter crnrs <<< "$entry"
+    part1=$((part1 + area*perimeter))
+    part2=$((part2 + area*crnrs))
+done
+
+echo "Part 1: $part1"
+echo "Part 2: $part2"
