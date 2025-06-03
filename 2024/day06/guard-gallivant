@@ -1,0 +1,118 @@
+#!/usr/bin/env bash
+
+declare -A grid
+declare -A visited
+
+ny=0
+nx=
+start_x=-1
+start_y=-1
+status=
+
+while read -r line; do
+    nx=${#line}
+    for ((x=0; x<nx; x++)); do
+        key="$x,$ny"
+        c=${line:$x:1}
+        grid[$key]=$c
+        if [[ $c == "^" ]]; then
+            start_x=$x
+            start_y=$ny
+        fi
+    done
+    ((ny++))
+done
+
+show_grid() {
+    local x y
+    for ((y=0; y<ny; y++)); do
+        for ((x=0; x<nx; x++)); do
+            key="$x,$y"
+            echo -n "${grid[$key]}"
+        done
+        echo
+    done
+}
+
+move-guard() {
+    declare -A states
+    local x=$start_x
+    local y=$start_y
+    local direction="up"
+    while true; do
+        ((visited["$x,$y"]++))
+        local state="${x},${y},${direction}"
+        states["$state"]=1
+        local x_next=$x
+        local y_next=$y
+        case $direction in
+            "up")
+                ((y_next--))
+                ;;
+            "down")
+                ((y_next++))
+                ;;
+            "left")
+                ((x_next--))
+                ;;
+            "right")
+                ((x_next++))
+                ;;
+            *)
+                echo "Invalid direction: $direction"
+                exit 1
+                ;;
+        esac
+        if (( x_next < 0 || x_next >= nx || y_next < 0 || y_next >= ny )); then
+            status="out"
+            return
+        fi
+        local key="$x_next,$y_next"
+        if [[ ${grid[$key]} == "#" ]]; then
+            case $direction in
+                "up")
+                    direction="right"
+                    ;;
+                "down")
+                    direction="left"
+                    ;;
+                "left")
+                    direction="up"
+                    ;;
+                "right")
+                    direction="down"
+                    ;;
+            esac
+        else
+            x=$x_next
+            y=$y_next
+        fi 
+        state="${x},${y},${direction}"
+        if [[ -n ${states["$state"]} ]]; then
+            status="blocked"
+            return
+        fi
+    done
+
+}
+
+move-guard
+if [[ "$status" == "blocked" ]]; then
+    echo "Guard is blocked in the grid :("
+    exit 1
+fi
+echo "Part 1: ${#visited[@]}"
+part2=0
+for key in "${!visited[@]}"; do
+    IFS=',' read -r x y <<< "$key"
+    if (( x == start_x && y == start_y )); then
+        continue
+    fi
+    grid[$key]="#"
+    move-guard
+    if [[ "$status" == "blocked" ]]; then
+        ((part2++))
+    fi
+    grid[$key]="."
+done
+echo "Part 2: $part2"
