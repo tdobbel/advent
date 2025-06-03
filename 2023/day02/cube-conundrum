@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+
+declare -A total=(
+    ["red"]=12
+    ["green"]=13
+    ["blue"]=14
+)
+
+game_id=1
+part1=0
+part2=0
+while read -r line; do
+    IFS=':' read -r head tail <<< "$line"
+    IFS=';' read -ra games <<< "$tail"
+    declare -A required=(
+        ["red"]=0
+        ["green"]=0
+        ["blue"]=0
+    )
+    for game in "${games[@]}"; do
+        IFS=',' read -ra cards <<< "$game"
+        for card in "${cards[@]}"; do
+            IFS=" " read -r count color <<< "$card"
+            if ((count > ${required[$color]})); then
+                required[$color]=$count
+            fi
+        done
+    done
+
+    ((part2 += ${required["red"]} * ${required["green"]} * ${required["blue"]}))
+
+    possible=true
+    for color in ${!required[@]}; do
+        req="${required[$color]}"
+        avail="${total[$color]}"
+        if (( req > avail )); then
+            possible=false
+            break
+        fi
+    done
+    if "$possible"; then
+        ((part1 += game_id))
+    fi
+    ((game_id++))
+done
+
+echo "Part 1: $part1"
+echo "Part 2: $part2"
