@@ -102,8 +102,9 @@ if [[ "$status" == "blocked" ]]; then
     exit 1
 fi
 echo "Part 1: ${#visited[@]}"
+positions=("${!visited[@]}")
 part2=0
-for key in "${!visited[@]}"; do
+for key in "${positions[@]}"; do
     IFS=',' read -r x y <<< "$key"
     if (( x == start_x && y == start_y )); then
         continue
