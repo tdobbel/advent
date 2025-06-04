@@ -18,22 +18,20 @@ while read -r line; do
     IFS=' ' read -ra winning <<<"$lhs"
     IFS=' ' read -ra hand <<<"$rhs"
 
-    n_winning=0
+    n_win=0
     ((counter[$icard]++))
     for card in "${hand[@]}"; do
         for win in "${winning[@]}"; do
             if [[ "$card" == "$win" ]]; then
-                ((n_winning++))
+                ((n_win++))
+                ((counter[$((icard + n_win))] += counter[$icard]))
                 break
             fi
         done
     done
-    for ((i = 1; i <= n_winning; i++)); do
-        ((counter[$((icard + i))] += counter[$icard]))
-    done
 
-    if ((n_winning > 0)); then
-        ((part1 += 1 << (n_winning - 1)))
+    if ((n_win > 0)); then
+        ((part1 += 1 << (n_win - 1)))
     fi
     ((icard++))
 done
