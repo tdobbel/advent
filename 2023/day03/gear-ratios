@@ -1,0 +1,83 @@
+#!/usr/bin/env bash
+
+declare -A symbols
+declare -A numbers
+
+vmin=$(printf "%d" "'0")
+vmax=$(printf "%d" "'9")
+
+ny=0
+start_x=
+start_y=
+while read -r line; do
+    n=0
+    nx=${#line}
+    for ((x=0; x < nx; x++)); do
+        v="${line:x:1}"
+        ascii=$(printf "%d" "'$v")
+        if (( ascii >= vmin && ascii <= vmax )); then
+            if ((n == 0)); then
+                start_x=$x
+                start_y=$ny
+            fi
+            ((n = 10*n + v))
+            if ((x == nx -1)); then
+                numbers["$start_x,$start_y"]=$n
+                n=0
+            fi
+        else
+            if [[ "$v" != "." ]]; then
+                symbols["$x,$ny"]=$v
+            fi
+            if ((n > 0)); then
+                numbers["$start_x,$start_y"]=$n
+                n=0
+            fi
+        fi
+    done
+    ((ny++))
+done
+
+part1=0
+for key in "${!numbers[@]}"; do
+    IFS=',' read -r x0 y0 <<< "$key"
+    value="${numbers[$key]}"
+    n=${#value}
+    for pos in "${!symbols[@]}"; do
+        IFS=',' read -r x y <<< "$pos"
+        if ((x >= x0-1 && x <= x0+n && y >= y0-1 && y <= y0+1)); then
+            ((part1 += value))
+            break
+        fi
+    done
+done
+
+echo "Part 1: $part1"
+
+part2=0
+for pos in "${!symbols[@]}"; do
+    sym="${symbols[$pos]}"
+    if [[ "$sym" != "*" ]]; then
+        continue
+    fi
+    IFS=',' read -r x y <<< "$pos"
+    counter=0
+    ratio=1
+    for key in "${!numbers[@]}"; do
+        IFS=',' read -r x0 y0 <<< "$key"
+        value="${numbers[$key]}"
+        n=${#value}
+        if ((x >= x0-1 && x <= x0+n && y >= y0-1 && y <= y0+1)); then
+            ((counter++))
+            ((ratio *= value))
+        fi
+        if ((counter > 2)); then
+            break
+        fi
+    done
+    if ((counter == 2)); then
+        ((part2 += ratio))
+    fi
+done
+
+echo "Part 2: $part2"
