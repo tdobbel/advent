@@ -1,0 +1,57 @@
+#!/usr/bin/env bash
+
+declare -a times
+declare -a distances
+
+while read -r line; do
+    start=
+    for ((i=0; i < ${#line}; i++)); do
+        if [[ "${line:i:1}" == ":" ]]; then
+            start=$((i + 1))
+            break
+        fi
+    done
+    line=${line:start}
+    IFS=' ' read -ra numbers <<<"$line"
+    if ((${#times[@]} == 0)); then 
+        times=("${numbers[@]}")
+    else
+        distances=("${numbers[@]}")
+    fi
+done
+
+n=${#times[@]}
+
+part1=1
+b=
+c=
+
+for ((i=0; i < n; i++)); do 
+    counter=0
+    record="${times[$i]}"
+    b+="$record"
+    distance="${distances[$i]}"
+    c+="$distance"
+    for ((vel=1; vel < record; vel++)); do
+        ((chrono = vel + distance / vel))
+        if ((chrono < record)); then
+            ((counter++))
+        fi
+    done
+    ((part1 *= counter))
+done
+
+echo "Part 1: $part1"
+
+# need to find x such that x + distance / x < record => x*x - record * x + distance < 0
+
+rho=$(echo "scale=10; sqrt($((b*b - 4*c)))" | bc)
+x0=$(echo "scale=0; ($b - $rho) / 2" | bc)
+x1=$(echo "scale=0; ($b + $rho) / 2" | bc)
+
+echo "Part 2: $((x1 - x0))"
+
+
+
+
+
