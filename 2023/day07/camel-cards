@@ -1,0 +1,172 @@
+#!/usr/bin/env bash
+
+declare -A cardvalues=(
+  ["2"]=2
+  ["3"]=3
+  ["4"]=4
+  ["5"]=5
+  ["6"]=6
+  ["7"]=7
+  ["8"]=8
+  ["9"]=9
+  ["T"]=10
+  ["J"]=11
+  ["Q"]=12
+  ["K"]=13
+  ["A"]=14
+)
+
+declare -a hands
+declare -A scores
+
+get-score() {
+  local hand="$1"
+  local use_joker="$2"
+  local counts
+  declare -A counts
+  local maxcount=0
+  for ((i = 0; i < 5; i++)); do
+    local card="${hand:i:1}"
+    ((counts["$card"]++))
+    if ((counts["$card"] > maxcount)); then
+      maxcount=${counts["$card"]}
+    fi
+  done
+  if "$use_joker"; then
+    local new_card=
+    local nmax=0
+    local n
+    for card in "${!counts[@]}"; do
+      if [[ "$card" == "J" ]]; then
+        continue
+      fi
+      n=${counts["$card"]}
+      if ((n > nmax)); then
+        nmax="$n"
+        new_card="$card"
+      fi
+    done
+    if [[ -n "$new_card" ]]; then
+      ((counts["$new_card"] += counts["J"]))
+      if ((counts["$new_card"] > maxcount)); then
+        maxcount=${counts["$new_card"]}
+      fi
+      unset 'counts["J"]'
+    fi
+  fi
+  local countsize="${#counts[@]}"
+  case "$maxcount" in
+  5)
+    echo 6
+    ;;
+  4)
+    echo 5
+    ;;
+  3)
+    if ((countsize == 2)); then
+      echo 4
+    else
+      echo 3
+    fi
+    ;;
+  2)
+    if ((countsize == 3)); then
+      echo 2
+    else
+      echo 1
+    fi
+    ;;
+  1)
+    echo 0
+    ;;
+  *)
+    echo "Error: Invalid hand"
+    return 1
+    ;;
+  esac
+}
+
+swap() {
+  local i="$1"
+  local j="$2"
+  local tmp="${hands[$i]}"
+  hands[i]="${hands[$j]}"
+  hands[j]="$tmp"
+}
+
+quick-sort() {
+  local low="$1"
+  local high="$2"
+  if ((low >= high)); then
+    return
+  fi
+  local pivot=${hands[$high]}
+  local pscore=${scores["$pivot"]}
+  local i="$low"
+  local hand score lower card1 card2
+  for ((j = low; j < high; j++)); do
+    hand="${hands[$j]}"
+    score="${scores["$hand"]}"
+    lower=false
+    if ((score > pscore)); then
+      continue
+    fi
+    if ((score < pscore)); then
+      lower=true
+    else
+      for ((k = 0; k < 5; k++)); do
+        card1="${hand:$k:1}"
+        card2="${pivot:$k:1}"
+        value1=${cardvalues["$card1"]}
+        value2=${cardvalues["$card2"]}
+        if ((value1 == value2)); then
+          continue
+        fi
+        if ((value1 < value2)); then
+          lower=true
+        else
+          lower=false
+        fi
+        break
+      done
+    fi
+    if ! "$lower"; then
+      continue
+    fi
+    swap "$i" "$j"
+    ((i++))
+  done
+  swap "$i" "$high"
+  quick-sort "$low" "$((i - 1))"
+  quick-sort "$((i + 1))" "$high"
+}
+
+while read -r hand bid; do
+  entry="${hand}:${bid}"
+  hands+=("$hand:$bid")
+  scores["$entry"]=$(get-score "$hand" "false")
+done
+
+quick-sort 0 "$((${#hands[@]} - 1))"
+
+part1=0
+for ((i = 0; i < ${#hands[@]}; i++)); do
+  IFS=":" read -r hand bid <<<"${hands[$i]}"
+  ((part1 += (i + 1) * bid))
+done
+echo "Part 1: $part1"
+
+# Update scores for part 2
+cardvalues["J"]=1
+for hand in "${hands[@]}"; do
+  scores["$hand"]=$(get-score "$hand" "true")
+done
+
+quick-sort 0 "$((${#hands[@]} - 1))" true
+part2=0
+for ((i = 0; i < ${#hands[@]}; i++)); do
+  IFS=":" read -r hand bid <<<"${hands[$i]}"
+  ((part2 += (i + 1) * bid))
+done
+
+echo "Part 2: $part2"
