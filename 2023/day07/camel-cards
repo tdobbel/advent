@@ -162,7 +162,7 @@ for hand in "${hands[@]}"; do
   scores["$hand"]=$(get-score "$hand" "true")
 done
 
-quick-sort 0 "$((${#hands[@]} - 1))" true
+quick-sort 0 "$((${#hands[@]} - 1))"
 part2=0
 for ((i = 0; i < ${#hands[@]}; i++)); do
   IFS=":" read -r hand bid <<<"${hands[$i]}"
