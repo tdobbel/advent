@@ -1,0 +1,94 @@
+#!/usr/bin/env bash
+
+declare -A network
+declare -A factors
+declare -a startnodes
+
+instructions=
+nstep=0
+
+iline=0
+while read -r line; do
+    if ((iline == 0)); then
+        instructions="$line"
+    elif ((iline > 1)); then
+        IFS=" = " read -r parent children <<<"$line"
+        children=${children:1:-1}
+        network["$parent"]="$children"
+        if [[ "${parent:2:1}" == "A" ]]; then
+            startnodes+=("$parent")
+        fi
+    fi
+    ((iline++))
+done
+
+count-steps() {
+    local n=${#instructions}
+    local node="$1"
+    local i instr
+    nstep=0
+    while true; do
+        if [[ "${node:2:1}" == "Z" ]]; then
+            break
+        fi
+        IFS=", " read -r left right <<<"${network[$node]}"
+        ((i = nstep % n))
+        instr="${instructions:i:1}"
+        if [[ "$instr" == "L" ]]; then
+            node="$left"
+        else
+            node="$right"
+        fi
+        ((nstep++))
+    done
+}
+
+factorize() {
+    local n="$1"
+    local locfactors
+    declare -A locfactors
+    local div=2
+    while ((div * div <= n)); do
+        while ((n % div == 0)); do
+            ((locfactors[$div]++))
+            ((n /= div))
+        done
+        ((div++))
+    done
+    if ((n > 1)); then
+        ((locfactors[$n]++))
+    fi
+    for f in "${!locfactors[@]}"; do
+        if [[ -z "${factors[$f]}" ]]; then
+            factors[$f]=0
+        fi
+        if ((factors[$f] < locfactors[$f])); then
+            factors[$f]=${locfactors[$f]}
+        fi
+    done
+}
+
+pow() {
+    local base="$1"
+    local exp="$2"
+    local result=1
+    while ((exp > 0)); do
+        ((result *= base))
+        ((exp--))
+    done
+    echo "$result"
+}
+
+count-steps "AAA"
+echo "Part 1: $nstep"
+
+for node in "${startnodes[@]}"; do
+    count-steps "$node"
+    factorize "$nstep"
+done
+
+part2=1
+for f in "${!factors[@]}"; do
+    ((part2 *= $(pow "$f" "${factors[$f]}")))
+done
+echo "Part 2: $part2"
