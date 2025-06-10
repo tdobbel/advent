@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+
+re='mul\(([0-9]+),([0-9]+)\)'
+
+do=true
+part1=0
+part2=0
+
+while read -r line; do
+    line=${line//"()"/$'\n'}
+    while read -r entry; do
+        while read -r match; do
+            if [[ $match =~ $re ]]; then
+                x="${BASH_REMATCH[1]}"
+                y="${BASH_REMATCH[2]}"
+                ((part1 += x * y))
+                if $do; then
+                    ((part2 += x * y))
+                fi
+            fi
+        done < <(grep -oP "$re" <<<"$entry")
+        if [[ "${entry:(-5)}" == "don't" ]]; then
+            do=false
+        elif [[ "${entry:(-2)}" == "do" ]]; then
+            do=true
+        fi
+    done <<<"$line"
+
+done
+
+echo "Part 1: $part1"
+echo "Part 2: $part2"
