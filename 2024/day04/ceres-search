@@ -1,0 +1,79 @@
+#!/usr/bin/env bash
+
+declare -a grid
+ny=0
+nx=0
+while read -r line; do
+    grid+=("$line")
+    nx="${#line}"
+    ((ny++))
+done
+
+part1=0
+part2=0
+
+check-xmas() {
+    local word="$1"
+    if [[ "$word" == "XMAS" || "$word" == "SAMX" ]]; then
+        ((part1++))
+    fi
+}
+
+check-x-mas() {
+    local i="$1"
+    local j="$2"
+    local k
+    local diag1=""
+    local diag2=""
+    for ((k = 0; k < 3; k++)); do
+        diag1+="${grid[i + k]:j+k:1}"
+        diag2+="${grid[i + k]:j+2-k:1}"
+    done
+    if [[ "$diag1" != "MAS" && "$diag1" != "SAM" ]]; then
+        return
+    fi 
+    if [[ "$diag2" != "MAS" && "$diag2" != "SAM" ]]; then
+        return
+    fi
+    ((part2++))
+}
+
+for ((i = 0; i < ny; i++)); do
+    for ((j = 0; j < nx; j++)); do
+        # 4 right
+        if ((j <= nx - 4)); then
+            word=${grid[i]:j:4}
+            check-xmas "$word"
+        fi
+        # 4 down
+        if ((i <= ny - 4)); then
+            word=""
+            for ((k = 0; k < 4; k++)); do
+                word+="${grid[i + k]:j:1}"
+            done
+            check-xmas "$word"
+        fi
+        # diagonal down-right
+        if ((i <= ny - 4 && j <= nx - 4)); then
+            word=""
+            for ((k = 0; k < 4; k++)); do
+                word+="${grid[i + k]:j+k:1}"
+            done
+            check-xmas "$word"
+        fi
+        # diagonal down-left
+        if ((i <= ny - 4 && j >= 3)); then
+            word=""
+            for ((k = 0; k < 4; k++)); do
+                word+="${grid[i + k]:j-k:1}"
+            done
+            check-xmas "$word"
+        fi
+        if ((i <= ny - 3 && j <= nx - 3)); then
+            check-x-mas "$i" "$j"
+        fi
+    done
+done
+
+echo "Part 1: $part1"
+echo "Part 2: $part2"
