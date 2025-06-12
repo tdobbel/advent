@@ -1,0 +1,94 @@
+#!/usr/bin/env bash
+
+declare -A smaller_pages
+declare -a pages
+
+is_ordering=true
+
+part1=0
+part2=0
+
+swap() {
+    local i="$1"
+    local j="$2"
+    local tmp="${pages[$i]}"
+    pages[i]="${pages[$j]}"
+    pages[j]="$tmp"
+}
+
+quick-sort() {
+    local low="$1"
+    local high="$2"
+    if ((low >= high)); then
+        return
+    fi
+    local pivot=${pages[$high]}
+    local pages_lt_pivot
+    IFS=',' read -ra pages_lt_pivot <<<"${smaller_pages[$pivot]}"
+    local i="$low"
+    local j current lower
+    for ((j = low; j < high; j++)); do
+        current="${pages[$j]}"
+        lower=false
+        for page in "${pages_lt_pivot[@]}"; do
+            if [[ "$current" == "$page" ]]; then
+                lower=true
+                break
+            fi
+        done
+        if $lower; then
+            swap "$i" "$j"
+            ((i++))
+        fi
+    done
+    swap "$i" "$high"
+    quick-sort "$low" "$((i - 1))"
+    quick-sort "$((i + 1))" "$high"
+}
+
+add-if-ordered() {
+    local page_numbers
+    n=${#pages[@]}
+    for ((i = 0; i < n; i++)); do
+        local page="${pages[i]}"
+        IFS=',' read -ra page_numbers <<<"${smaller_pages[$page]}"
+        for ((j = i + 1; j < n; j++)); do
+            local x="${pages[j]}"
+            for page_number in "${page_numbers[@]}"; do
+                if [[ "$page_number" == "$x" ]]; then
+                    return
+                fi
+            done
+        done
+    done
+    ((part1 += pages[$((n / 2))]))
+}
+
+while read -r line; do
+    if ((${#line} == 0)); then
+        is_ordering=false
+        continue
+    fi
+    if $is_ordering; then
+        IFS='|' read -r lower greater <<<"$line"
+        if [[ -z "${smaller_pages[$greater]}" ]]; then
+            smaller_pages[$greater]="$lower"
+        else
+            smaller_pages[$greater]+=",$lower"
+        fi
+        continue
+    fi
+
+    IFS="," read -ra pages <<<"$line"
+    n=${#pages[@]}
+    prev="$part1"
+    add-if-ordered
+    if ((part1 == prev)); then
+        quick-sort 0 $((n - 1))
+        ((part2 += pages[$((n / 2))]))
+    fi
+    unset pages
+done
+
+echo "Part 1: $part1"
+echo "Part 2: $part2"
