@@ -9,7 +9,7 @@ declare -a cntr
 while read -r line; do
     for ((i=0; i<${#line}; i++)); do
         block_size=${line:i:1}
-        block_start+=("$((${block_start[i]} + block_size))")
+        block_start+=("$((block_start[i] + block_size))")
         value=
         if (( i%2 == 0 )); then
             value=$((i / 2))
@@ -29,23 +29,23 @@ blocks2=("${blocks[@]}")
 ileft=0
 iright=$((${#blocks[@]} - 1))
 while true; do
-    while (( ${blocks[ileft]} >= 0 )); do
+    while (( blocks[ileft] >= 0 )); do
         ((ileft++))
     done
-    while (( ${blocks[iright]} < 0 )); do
+    while (( blocks[iright] < 0 )); do
         ((iright--))
     done
     if (( ileft >= iright )); then
         break
     fi
-    blocks[$ileft]=${blocks[$iright]}
-    blocks[$iright]=-1
+    blocks[ileft]=${blocks[$iright]}
+    blocks[iright]=-1
 done
 
 iright=$((${#cntr[@]} - 1))
 while true; do
     ileft=1
-    required_space=$(( ${block_start[$((iright+1))]} - ${block_start[iright]} ))
+    required_space=$(( block_start[iright+1] - block_start[iright] ))
     right=${block_start[$iright]}
     value=${blocks2[$right]}
     while (( ileft < iright)); do
@@ -55,9 +55,9 @@ while true; do
         free=$((size - n))
         if ((free >= required_space)); then 
             for ((j=0; j<required_space; j++)); do
-                blocks2[$((start + n + j))]=$value
-                blocks2[$((right + j))]=-1
-                cntr[$ileft]=$((cntr[ileft] + 1))
+                blocks2[start + n + j]=$value
+                blocks2[right + j]=-1
+                cntr[ileft]=$((cntr[ileft] + 1))
             done
             break
         fi

@@ -14,9 +14,7 @@ is-possible() {
     local index="$3"
     local n="${#numbers[@]}"
     if ((index == n)); then
-        ((result == x)) && {
-            possible=true
-        }
+        ((result == x)) && possible=true
         return
     fi
     local y="${numbers[index]}"
