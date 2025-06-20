@@ -1,0 +1,77 @@
+#!/usr/bin/env bash
+
+declare -a stacks
+declare -a stacks2
+parsing_blocks=1
+
+reverse-stack() {
+    for ((i = 0; i < ${#stacks[@]}; i++)); do
+        stacks[i]=$(echo "${stacks[i]}" | rev)
+    done
+}
+
+copy-stack() {
+    local n="${#stacks[@]}"
+    stacks2=()
+    for ((i = 0; i < n; i++)); do
+        stacks2[i]="${stacks[i]}"
+    done
+}
+
+move-one-by-one() {
+    local n="$1"
+    local from=$(("$2" - 1))
+    local to=$(("$3" - 1))
+    for ((i = 0; i < n; i++)); do
+        local nfrom="${stacks[from]}"
+        local c="${stacks[from]: -1}"
+        stacks[to]+="$c"
+        stacks[from]="${stacks[from]:0:nfrom-1}"
+    done
+}
+
+move-n() {
+    local n="$1"
+    local from=$(("$2" - 1))
+    local to=$(("$3" - 1))
+    blocks=${stacks2[from]: -$n}
+    stacks2[to]+="$blocks"
+    stacks2[from]="${stacks2[from]:0:${#stacks2[from]}-$n}"
+}
+
+while IFS= read -r line; do
+    lsize=${#line}
+    [[ "${line:1:1}" == "1" ]] && continue
+    if ((lsize == 0)); then
+        reverse-stack
+        copy-stack
+        parsing_blocks=0
+        continue
+    fi
+    if ((!parsing_blocks)); then
+        read -ra split <<<"$line"
+        move-one-by-one "${split[1]}" "${split[3]}" "${split[5]}"
+        move-n "${split[1]}" "${split[3]}" "${split[5]}"
+    else
+        ((n = lsize / 4 + 1))
+        for ((i = 0; i < n; i++)); do
+            c="${line:i*4+1:1}"
+            [[ "$c" == " " ]] && continue
+            if [[ -z "${stacks[i]}" ]]; then
+                stacks[i]="$c"
+            else
+                stacks[i]+="$c"
+            fi
+        done
+    fi
+done
+
+part1=""
+part2=""
+for ((i = 0; i < ${#stacks[@]}; i++)); do
+    part1+="${stacks[i]: -1}"
+    part2+="${stacks2[i]: -1}"
+done
+
+echo "Part 1: $part1"
+echo "Part 2: $part2"
