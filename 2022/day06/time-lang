@@ -7,8 +7,13 @@ lexec["Rust"]="./target/release/day06"
 lexec["Go"]="./goday06"
 lexec["C"]="./day06"
 lexec["Zig"]="./run06"
+lexec["Bash"]="./tuning-trouble"
 
 for lang in "${!lexec[@]}"; do
     echo "-- $lang --"
-    time "${lexec[$lang]}" input
+    if [[ "$lang" == "Bash" ]]; then
+        time "${lexec[$lang]}" < "input"
+    else
+        time "${lexec[$lang]}" input
+    fi
 done
