@@ -1,0 +1,74 @@
+#!/usr/bin/env bash
+
+found=
+score=
+declare -a elves
+
+char-to-byte() {
+    printf "%d" "'$1"
+}
+
+va=$(char-to-byte "a")
+vA=$(char-to-byte "A")
+
+compute-score() {
+    local vc
+    vc=$(char-to-byte "$1")
+    if ((vc < va)); then
+        ((score = vc - vA + 27))
+    else
+        ((score = vc - va + 1))
+    fi
+}
+
+check-contains() {
+    found=0
+    local string="$1"
+    local char="$2"
+    local n=${#string}
+    local i
+    for ((i = 0; i < n; i++)); do
+        if [[ "${string:i:1}" == "$char" ]]; then
+            found=1
+            return
+        fi
+    done
+}
+
+find-common-char() {
+    local x="$1"
+    local ys=("${@:2}")
+    local nx="${#x}"
+    local i
+    for ((i = 0; i < nx; i++)); do
+        local c="${x:i:1}"
+        for y in "${ys[@]}"; do
+            check-contains "$y" "$c"
+            ((!found)) && break
+        done
+        if ((found)); then
+            compute-score "$c"
+            return
+        fi
+    done
+}
+
+part1=0
+part2=0
+
+while read -r line; do
+    elves+=("$line")
+    n=$((${#line} / 2))
+    lhs="${line:0:n}"
+    rhs="${line:n}"
+    find-common-char "$lhs" "$rhs"
+    ((part1 += score))
+
+    ((${#elves[@]} < 3)) && continue
+    find-common-char "${elves[@]}"
+    ((part2 += score))
+    unset elves
+done
+
+echo "Part 1: $part1"
+echo "Part 2: $part2"
