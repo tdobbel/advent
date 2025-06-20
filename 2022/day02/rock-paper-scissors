@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+
+moves1=(A B C)
+moves2=(X Y Z)
+value1=
+value2=
+score=
+part1=0
+part2=0
+
+compute-score() {
+    if ((value2 == value1 % 3 + 1)); then
+        ((score = value2 + 6))
+    elif ((value1 == value2)); then
+        ((score = value2 + 3))
+    else
+        ((score = value2))
+    fi
+}
+
+parse-moves() {
+    for ((i = 0; i < 3; i++)); do
+        if [[ "$move1" == "${moves1[i]}" ]]; then
+            ((value1 = i + 1))
+        fi
+        if [[ "$move2" == "${moves2[i]}" ]]; then
+            ((value2 = i + 1))
+        fi
+    done
+}
+
+while read -r move1 move2; do
+    parse-moves
+    compute-score
+    ((part1 += score))
+    if ((value2 == 1)); then
+        ((value2 = (value1 + 1) % 3 + 1))
+    elif ((value2 == 2)); then
+        ((value2 = value1))
+    else
+        ((value2 = value1 % 3 + 1))
+    fi
+    compute-score
+    ((part2 += score))
+done
+
+echo "Part 1: $part1"
+echo "Part 2: $part2"
