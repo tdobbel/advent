@@ -22,11 +22,12 @@ move-one-by-one() {
     local n="$1"
     local from=$(("$2" - 1))
     local to=$(("$3" - 1))
+    local nfrom="${#stacks[from]}"
     for ((i = 0; i < n; i++)); do
-        local nfrom="${stacks[from]}"
+        ((nfrom--))
         local c="${stacks[from]: -1}"
         stacks[to]+="$c"
-        stacks[from]="${stacks[from]:0:nfrom-1}"
+        stacks[from]="${stacks[from]:0:nfrom}"
     done
 }
 
