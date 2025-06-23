@@ -1,0 +1,129 @@
+#!/usr/bin/env bash
+
+declare -A fsize
+declare -A parent
+declare -A children
+declare -A depth
+declare -a sorted
+declare -A totalsize
+
+parent["/"]=
+cwd="/"
+depth["/"]=0
+sorted[0]="/"
+maxdepth=0
+
+child-path() {
+    if [[ "$cwd" == "/" ]]; then
+        echo "/$1"
+    else
+        echo "$cwd/$1"
+    fi
+}
+
+add-to-sorted() {
+    local dir="$1"
+    local depth_="${depth[$dir]}"
+    if [[ -z "${sorted[$depth_]}" ]]; then
+        sorted[depth_]="$dir"
+    else
+        sorted[depth_]+=":$dir"
+    fi
+}
+
+add-child() {
+    local childpath
+    childpath=$(child-path "$1")
+    parent["$childpath"]="$cwd"
+    if [[ -z "${children["$cwd"]}" ]]; then
+        children["$cwd"]="$childpath"
+    else
+        children["$cwd"]+=":$childpath"
+    fi
+    local child_depth
+    ((child_depth = depth[$cwd] + 1))
+    if ((child_depth > maxdepth)); then
+        maxdepth=$child_depth
+    fi
+    depth["$childpath"]="$child_depth"
+    add-to-sorted "$childpath"
+}
+
+go-to-parent() {
+    if [[ -z "${parent[$cwd]}" ]]; then
+        echo "No parent found"
+        exit 1
+    fi
+    cwd="${parent[$cwd]}"
+}
+
+go-to-child() {
+    local dst
+    dst=$(child-path "$1")
+    local child_paths
+    IFS=":" read -ra child_paths <<<"${children[$cwd]}"
+    for child in "${child_paths[@]}"; do
+        if [[ "$child" == "$dst" ]]; then
+            cwd="$dst"
+            return
+        fi
+    done
+    echo "Child $dst not found in $cwd"
+    exit 1
+}
+
+i=0
+while read -r line; do
+    ((i++))
+    if ((i == 1)); then
+        continue
+    fi
+    read -ra words <<<"$line"
+    if [[ "${words[0]}" == "$" ]]; then
+        [[ "${words[1]}" == "ls" ]] && continue
+        dst="${words[2]}"
+        if [[ "$dst" == ".." ]]; then
+            go-to-parent
+        else
+            go-to-child "$dst"
+        fi
+    elif [[ "${words[0]}" == "dir" ]]; then
+        add-child "${words[1]}"
+    else
+        size="${words[0]}"
+        ((fsize[$cwd] += size))
+    fi
+done
+
+part1=0
+
+for ((d = maxdepth; d >= 0; d--)); do
+    IFS=":" read -ra dirs <<<"${sorted[$d]}"
+    for dir in "${dirs[@]}"; do
+        totalsize[$dir]=0
+        if [[ -n "${fsize[$dir]}" ]]; then
+            ((totalsize[$dir] += fsize[$dir]))
+        fi
+        if [[ -n "${children[$dir]}" ]]; then
+            IFS=":" read -ra subdirs <<<"${children[$dir]}"
+            for child in "${subdirs[@]}"; do
+                ((totalsize[$dir] += totalsize[$child]))
+            done
+        fi
+        ((totalsize[$dir] <= 100000)) && ((part1 += totalsize[$dir]))
+    done
+done
+
+echo "Part 1: $part1"
+
+TOTAL_SPACE=70000000
+REQUIRED_SPACE=30000000
+
+((free_space = TOTAL_SPACE - totalsize["/"]))
+((target = REQUIRED_SPACE - free_space))
+part2=TOTAL_SPACE
+for size in "${totalsize[@]}"; do
+    ((size >= target && size < part2)) && part2=$size
+done
+
+echo "Part 2: $part2"
