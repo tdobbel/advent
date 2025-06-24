@@ -3,15 +3,14 @@
 declare -A fsize
 declare -A parent
 declare -A children
-declare -A depth
-declare -a sorted
+declare -a dirsAtDepth
 declare -A totalsize
 
 parent["/"]=
 cwd="/"
-depth["/"]=0
-sorted[0]="/"
+dirsAtDepth[0]="/"
 maxdepth=0
+depth=0
 
 child-path() {
     if [[ "$cwd" == "/" ]]; then
@@ -23,11 +22,15 @@ child-path() {
 
 add-to-sorted() {
     local dir="$1"
-    local depth_="${depth[$dir]}"
-    if [[ -z "${sorted[$depth_]}" ]]; then
-        sorted[depth_]="$dir"
+    local d
+    ((d = depth + 1))
+    if [[ -z "${dirsAtDepth[$d]}" ]]; then
+        dirsAtDepth[d]="$dir"
     else
-        sorted[depth_]+=":$dir"
+        dirsAtDepth[d]+=":$dir"
+    fi
+    if ((d > maxdepth)); then
+        maxdepth=$d
     fi
 }
 
@@ -40,12 +43,6 @@ add-child() {
     else
         children["$cwd"]+=":$childpath"
     fi
-    local child_depth
-    ((child_depth = depth[$cwd] + 1))
-    if ((child_depth > maxdepth)); then
-        maxdepth=$child_depth
-    fi
-    depth["$childpath"]="$child_depth"
     add-to-sorted "$childpath"
 }
 
@@ -55,6 +52,7 @@ go-to-parent() {
         exit 1
     fi
     cwd="${parent[$cwd]}"
+    ((depth--))
 }
 
 go-to-child() {
@@ -65,6 +63,7 @@ go-to-child() {
     for child in "${child_paths[@]}"; do
         if [[ "$child" == "$dst" ]]; then
             cwd="$dst"
+            ((depth++))
             return
         fi
     done
@@ -98,7 +97,7 @@ done
 part1=0
 
 for ((d = maxdepth; d >= 0; d--)); do
-    IFS=":" read -ra dirs <<<"${sorted[$d]}"
+    IFS=":" read -ra dirs <<<"${dirsAtDepth[$d]}"
     for dir in "${dirs[@]}"; do
         totalsize[$dir]=0
         if [[ -n "${fsize[$dir]}" ]]; then
