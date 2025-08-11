@@ -1,73 +1,61 @@
 const std = @import("std");
 
-const PositionError = error{OutsideBounds};
 const allocator = std.heap.c_allocator;
 
-const Direction = enum {
+const Direction = enum(usize) {
     Up,
+    Right,
     Down,
     Left,
-    Right,
 };
 
-const Position = struct { x: usize, y: usize, direction: Direction };
-
-pub fn turnRight(pos: *Position) void {
-    switch (pos.direction) {
-        Direction.Up => pos.direction = Direction.Right,
-        Direction.Right => pos.direction = Direction.Down,
-        Direction.Down => pos.direction = Direction.Left,
-        Direction.Left => pos.direction = Direction.Up,
+pub fn turnRight(heading: Direction) Direction {
+    switch (heading) {
+        Direction.Up => return Direction.Right,
+        Direction.Right => return Direction.Down,
+        Direction.Down => return Direction.Left,
+        Direction.Left => return Direction.Up,
     }
 }
 
-pub fn substract(x: usize, y: usize) !usize {
-    if (y > x) return error.OutsideBounds;
-    return x - y;
+pub fn nextPosition(x: usize, y: usize, heading: Direction) struct { i32, i32 } {
+    const ix: i32 = @intCast(x);
+    const iy: i32 = @intCast(y);
+    switch (heading) {
+        Direction.Up => return .{ ix, iy - 1 },
+        Direction.Right => return .{ ix + 1, iy },
+        Direction.Down => return .{ ix, iy + 1 },
+        Direction.Left => return .{ ix - 1, iy },
+    }
 }
 
-pub fn nextPosition(pos: *Position, nx: usize, ny: usize) PositionError!struct { usize, usize } {
-    var x = pos.x;
-    var y = pos.y;
-    switch (pos.direction) {
-        Direction.Up => y = try substract(pos.y, 1),
-        Direction.Down => y = pos.y + 1,
-        Direction.Left => x = try substract(pos.x, 1),
-        Direction.Right => x = pos.x + 1,
-    }
-    if (x >= nx or y >= ny) {
-        return error.OutsideBounds;
-    }
-    return .{ x, y };
-}
-
-pub fn moveGuard(guard: *Position, obstacles: std.ArrayList([]bool), visited: []bool, nVisited: *usize) !bool {
+pub fn moveGuard(x0: usize, y0: usize, obstacles: std.ArrayList([]bool), visited: []bool, history: [4][]bool) !bool {
     const ny = obstacles.items.len;
     const nx = obstacles.items[0].len;
-    var history = std.AutoHashMap(Position, void).init(allocator);
-    defer history.deinit();
-    nVisited.* = 0;
+    var x = x0;
+    var y = y0;
+    var x_next: usize = undefined;
+    var y_next: usize = undefined;
+    var heading = Direction.Up;
     while (true) {
-        if (history.contains(guard.*)) return true;
-        try history.put(guard.*, {});
-        visited[guard.y * nx + guard.x] = true;
-        const pnext: [2]usize = nextPosition(guard, nx, ny) catch |err| {
-            if (err == PositionError.OutsideBounds) {
-                for (visited) |v| {
-                    if (v) nVisited.* += 1;
-                }
-                return false;
-            }
-            return err;
-        };
-        const x = pnext[0];
-        const y = pnext[1];
-        if (obstacles.items[y][x]) {
-            turnRight(guard);
-        } else {
-            guard.x = x;
-            guard.y = y;
+        visited[y * nx + x] = true;
+        const xy_next: [2]i32 = nextPosition(x, y, heading);
+        if (xy_next[0] < 0 or xy_next[0] >= nx or xy_next[1] < 0 or xy_next[1] >= ny) {
+            return false;
         }
+        x_next = @intCast(xy_next[0]);
+        y_next = @intCast(xy_next[1]);
+        if (obstacles.items[y_next][x_next]) {
+            heading = turnRight(heading);
+        } else {
+            x = x_next;
+            y = y_next;
+        }
+        const d = @intFromEnum(heading);
+        if (history[d][y * nx + x]) {
+            return true;
+        }
+        history[d][y * nx + x] = true;
     }
 }
 
@@ -86,8 +74,8 @@ pub fn main() !void {
     var buffer: [1024]u8 = undefined;
     var buf_reader = std.io.bufferedReader(file.reader());
     var in_stream = buf_reader.reader();
+
     var ny: usize = 0;
-    // var guard: Position = undefined;
     var startX: usize = undefined;
     var startY: usize = undefined;
     while (try in_stream.readUntilDelimiterOrEof(&buffer, '\n')) |line| {
@@ -103,42 +91,55 @@ pub fn main() !void {
         try obstacles.append(row);
         ny += 1;
     }
-    const nx = obstacles.items[0].len;
-    const visited: []bool = try allocator.alloc(bool, ny * ny);
-    defer allocator.free(visited);
-    var part1: usize = 0;
-    var guard = Position{ .x = startX, .y = startY, .direction = Direction.Up };
-    _ = try moveGuard(&guard, obstacles, visited, &part1);
-    std.debug.print("Part 1: {}\n", .{part1});
 
-    const n = part1;
-    const candidates: []usize = try allocator.alloc(usize, n * 2);
-    defer allocator.free(candidates);
-    {
-        var i: usize = 0;
-        for (visited, 0..) |v, pos| {
-            if (!v) continue;
-            candidates[2 * i + 0] = pos % nx;
-            candidates[2 * i + 1] = pos / nx;
-            i += 1;
-        }
+    var history: [4][]bool = undefined;
+    for (0..4) |i| {
+        history[i] = try allocator.alloc(bool, ny * ny);
+        errdefer allocator.free(history[i]);
+        @memset(history[i], false);
     }
 
+    const nx = obstacles.items[0].len;
+    const visited: []bool = try allocator.alloc(bool, ny * nx);
+    defer allocator.free(visited);
+    @memset(visited, false);
+
+    var part1: usize = 0;
+    _ = try moveGuard(startX, startY, obstacles, visited, history);
+    for (visited) |v| {
+        if (v) {
+            part1 += 1;
+        }
+    }
+    std.debug.print("Part 1: {}\n", .{part1});
+    var extra_walls: []usize = try allocator.alloc(usize, part1 - 1);
+    defer allocator.free(extra_walls);
+
+    var iw: usize = 0;
+    for (visited, 0..) |v, ip| {
+        if (v and ip != startY * nx + startX) {
+            extra_walls[iw] = ip;
+            iw += 1;
+        } 
+    }
     var part2: usize = 0;
-    for (0..n) |i| {
-        const x = candidates[2 * i + 0];
-        const y = candidates[2 * i + 1];
-        if (x == startX and y == startY) continue;
-        @memset(visited, false);
+    for (extra_walls) |pixel| {
+        const x = pixel % nx;
+        const y = pixel / ny;
+        for (0..4) |d| {
+            @memset(history[d], false);
+        }
         obstacles.items[y][x] = true;
-        guard = Position{ .x = startX, .y = startY, .direction = Direction.Up };
-        if (try moveGuard(&guard, obstacles, visited, &part1)) {
+        if (try moveGuard(startX, startY, obstacles, visited, history)) {
             part2 += 1;
         }
         obstacles.items[y][x] = false;
     }
     std.debug.print("Part 2: {}\n", .{part2});
 
+    for (history) |h| {
+        allocator.free(h);
+    }
     for (obstacles.items) |row| {
         allocator.free(row);
     }
