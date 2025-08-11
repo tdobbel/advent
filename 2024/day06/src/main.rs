@@ -36,12 +36,15 @@ fn move_guard(
     loop {
         visited[y * nx + x] = true;
         let (x_next, y_next) = match next_pos(x, y, &heading) {
-            Some(pos) => pos,
+            Some(pos) => {
+                if pos.0 >= nx || pos.1 >= ny {
+                    return false;
+                } else {
+                    pos
+                }
+            }
             None => return false,
         };
-        if x_next >= nx || y_next >= ny {
-            return false;
-        }
         if is_wall[y_next][x_next] {
             heading = match heading {
                 Orientation::Up => Orientation::Right,
