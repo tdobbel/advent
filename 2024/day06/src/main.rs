@@ -1,119 +1,120 @@
+use anyhow::Result;
 use std::env;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
-use std::collections::HashMap;
 
-use anyhow::Result;
-
-#[derive(PartialEq, Clone, Debug)]
+#[derive(Clone, Copy)]
 enum Orientation {
-    Up,
-    Down,
-    Left,
-    Right
+    Up = 0,
+    Right = 1,
+    Down = 2,
+    Left = 3,
 }
 
-struct Guard {
-    x: i32,
-    y: i32,
-    orientation: Orientation
+fn next_pos(x: usize, y: usize, heading: &Orientation) -> Option<(usize, usize)> {
+    let new_pos = match heading {
+        Orientation::Up => (x, y.checked_sub(1)?),
+        Orientation::Down => (x, y + 1),
+        Orientation::Left => (x.checked_sub(1)?, y),
+        Orientation::Right => (x + 1, y),
+    };
+    Some(new_pos)
 }
 
 fn move_guard(
-    x0: i32, y0: i32, o0: &Orientation, xmax: i32, ymax: i32, obstacles: &HashMap<(usize,usize), bool>
-) -> (HashMap<(usize,usize), Vec<Orientation>>, bool) {
-    let mut guard = Guard { x: x0, y: y0, orientation: o0.clone() };
-    let mut visited = HashMap::<(usize, usize), Vec<Orientation>>::new();
-    let mut looping = false;
-    while guard.x < xmax && guard.x >= 0 && guard.y < ymax && guard.y >= 0 {
-        visited.entry((guard.y as usize, guard.x as usize))
-            .and_modify( |values| {
-                if !values.contains(&guard.orientation) {
-                    values.push(guard.orientation.clone());
-                }
-            })
-            .or_insert(Vec::<Orientation>::new());
-        let (xnew, ynew) = match guard.orientation {
-            Orientation::Up => (guard.x, guard.y - 1),
-            Orientation::Down => (guard.x, guard.y + 1),
-            Orientation::Left => (guard.x - 1, guard.y),
-            Orientation::Right => (guard.x + 1, guard.y)
+    x0: usize,
+    y0: usize,
+    is_wall: &[Vec<bool>],
+    visited: &mut [bool],
+    history: &mut [Vec<bool>; 4],
+) -> bool {
+    let ny = is_wall.len();
+    let nx = is_wall[0].len();
+    let mut x = x0;
+    let mut y = y0;
+    let mut heading = Orientation::Up;
+    loop {
+        visited[y * nx + x] = true;
+        let (x_next, y_next) = match next_pos(x, y, &heading) {
+            Some(pos) => pos,
+            None => return false,
         };
-        let blocked = match obstacles.get(&(ynew as usize, xnew as usize)) {
-            Some(b) => *b,
-            None => false
-        };
-        if !blocked {
-            guard.x = xnew;
-            guard.y = ynew;
+        if x_next >= nx || y_next >= ny {
+            return false;
         }
-        else {
-            guard.orientation = match guard.orientation {
+        if is_wall[y_next][x_next] {
+            heading = match heading {
                 Orientation::Up => Orientation::Right,
+                Orientation::Right => Orientation::Down,
                 Orientation::Down => Orientation::Left,
                 Orientation::Left => Orientation::Up,
-                Orientation::Right => Orientation::Down
             };
+        } else {
+            x = x_next;
+            y = y_next;
         }
-        looping = match visited.get(&(ynew as usize, xnew as usize)) {
-            Some(v) => v.contains(&guard.orientation),
-            None => false
-        };
-        if looping {
-            break
+        let heading_index = heading as usize;
+        if history[heading_index][y * nx + x] {
+            return true; // Loop detected
         }
+        history[heading_index][y * nx + x] = true;
     }
-    (visited, looping)
 }
 
 fn main() -> Result<()> {
     let args = env::args().nth(1).expect("Please provide an input file");
     let file = File::open(args)?;
     let reader = BufReader::new(file);
-    let mut obstacles = HashMap::<(usize, usize), bool>::new();
-    let mut xmax: i32 = 0;
-    let mut ymax: i32 = 0;
-    let mut x0: i32 = 0;
-    let mut y0: i32 = 0;
-    let mut o0: Orientation = Orientation::Up;
-    for (i,line) in reader.lines().enumerate() {
+    let mut x_start: usize = 0;
+    let mut y_start: usize = 0;
+    let mut is_wall: Vec<Vec<bool>> = Vec::new();
+    for (y, line) in reader.lines().enumerate() {
         let line = line.unwrap();
-        xmax = line.chars().count() as i32;
-        ymax += 1;
-        for (j,case) in line.chars().enumerate() {
-            if case == '#' {
-                obstacles.insert((i,j), true);
-            }
-            else if case == '.'{
-                continue
-            }
-            else {
-                x0 = j as i32;
-                y0 = i as i32;
-                o0 = match case {
-                    '^' => Orientation::Up,
-                    'v' => Orientation::Down,
-                    '<' => Orientation::Left,
-                    '>' => Orientation::Right,
-                    _ => panic!("Invalid character")
-                };
+        let mut row: Vec<bool> = Vec::new();
+        for symbol in line.chars() {
+            row.push(symbol == '#');
+            if symbol == '^' {
+                x_start = row.len() - 1;
+                y_start = y;
             }
         }
+        is_wall.push(row);
     }
-    let route = move_guard(x0, y0, &o0, xmax, ymax, &obstacles).0;
-    println!("Guard visited {} distinct positions", route.len());
-    let mut total = 0;
-    for (indx, (pos,_)) in route.iter().enumerate() {
-        if indx == 0 {
-            continue
-        }
-        obstacles.insert(*pos, true);
-        let looping =  move_guard(x0, y0, &o0, xmax, ymax, &obstacles).1;
-        if looping {
-            total += 1;
-        }
-        obstacles.remove(&pos);
+    let ny = is_wall.len();
+    let nx = is_wall[0].len();
+    let mut history: [Vec<bool>; 4] = Default::default();
+    for h in history.iter_mut() {
+        *h = vec![false; ny * nx];
     }
-    println!("{} possible positions for obstacle", total);
+    let mut visited = vec![false; ny * nx];
+    move_guard(x_start, y_start, &is_wall, &mut visited, &mut history);
+    let part1 = visited.iter().filter(|&&v| v).count();
+    println!("Part 1: {}", part1);
+
+    let new_walls: Vec<usize> = visited
+        .iter()
+        .enumerate()
+        .filter_map(|(i, &v)| {
+            if v && i != y_start * nx + x_start {
+                Some(i)
+            } else {
+                None
+            }
+        })
+        .collect();
+    let mut part2 = 0;
+    for pixel in new_walls {
+        for h in history.iter_mut() {
+            h.fill_with(|| false);
+        }
+        let x = pixel % nx;
+        let y = pixel / nx;
+        is_wall[y][x] = true;
+        if move_guard(x_start, y_start, &is_wall, &mut visited, &mut history) {
+            part2 += 1;
+        }
+        is_wall[y][x] = false;
+    }
+    println!("Part 2: {}", part2);
     Ok(())
 }
