@@ -71,10 +71,10 @@ fn main() -> Result<()> {
     for (y, line) in reader.lines().enumerate() {
         let line = line.unwrap();
         let mut row: Vec<bool> = Vec::new();
-        for symbol in line.chars() {
+        for (x, symbol) in line.chars().enumerate() {
             row.push(symbol == '#');
             if symbol == '^' {
-                x_start = row.len() - 1;
+                x_start = x;
                 y_start = y;
             }
         }
