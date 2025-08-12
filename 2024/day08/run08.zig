@@ -1,70 +1,79 @@
 const std = @import("std");
 
-const AntennaMap = std.AutoHashMap(u8, std.ArrayList(usize));
+const Position = struct {
+    x: i32,
+    y: i32,
+};
+
+const AntennaMap = std.AutoHashMap(u8, std.ArrayList(Position));
+const Antinodes = std.AutoHashMap(Position, void);
 const allocator = std.heap.c_allocator;
 
-pub fn validIndex(x: i32, y: i32, nx: usize, ny: usize, index: *usize) bool {
-    const inx: i32 = @intCast(nx);
-    const iny: i32 = @intCast(ny);
-    if (x < 0 or y < 0 or x >= inx or y >= iny) {
+pub fn add_antinode(
+    antinodes: *Antinodes,
+    x: i32,
+    y: i32,
+    nx: i32,
+    ny: i32,
+) !bool {
+    if (x < 0 or y < 0 or x >= nx or y >= ny) {
         return false;
     }
-    index.* = @intCast(x + y * inx);
+    try antinodes.put(Position{ .x = x, .y = y }, {});
     return true;
 }
 
-pub fn antinodes1(antennas: *AntennaMap, nx: usize, ny: usize) !usize {
-    var antinodes = std.AutoHashMap(usize, void).init(allocator);
+pub fn count_antinodes(antennas: *AntennaMap, nx: i32, ny: i32) !usize {
+    var antinodes = Antinodes.init(allocator);
     defer antinodes.deinit();
     var it = antennas.iterator();
-    var index: usize = 0;
     while (it.next()) |entry| {
-        const nodes = entry.value_ptr.*;
-        const n = nodes.items.len;
+        const positions = entry.value_ptr.*;
+        const n = positions.items.len;
         for (0..n - 1) |i| {
-            const xa: i32 = @intCast(nodes.items[i] % nx);
-            const ya: i32 = @intCast(nodes.items[i] / nx);
+            const xa: i32 = positions.items[i].x;
+            const ya: i32 = positions.items[i].y;
             for (i + 1..n) |j| {
-                const xb: i32 = @intCast(nodes.items[j] % nx);
-                const yb: i32 = @intCast(nodes.items[j] / nx);
+                const xb: i32 = positions.items[j].x;
+                const yb: i32 = positions.items[j].y;
                 const dx = xb - xa;
                 const dy = yb - ya;
-                if (validIndex(xa - dx, ya - dy, nx, ny, &index)) try antinodes.put(index, {});
-                if (validIndex(xb + dx, yb + dy, nx, ny, &index)) try antinodes.put(index, {});
+                _ = try add_antinode(&antinodes, xb + dx, yb + dy, nx, ny);
+                _ = try add_antinode(&antinodes, xa - dx, ya - dy, nx, ny);
             }
         }
     }
     return antinodes.count();
 }
 
-pub fn antinodes2(antennas: *AntennaMap, nx: usize, ny: usize) !usize {
-    var antinodes = std.AutoHashMap(usize, void).init(allocator);
+pub fn count_antinodes2(antennas: *AntennaMap, nx: i32, ny: i32) !usize {
+    var antinodes = Antinodes.init(allocator);
     defer antinodes.deinit();
     var it = antennas.iterator();
-    var index: usize = 0;
+    var x: i32 = 0;
+    var y: i32 = 0;
     while (it.next()) |entry| {
-        const nodes = entry.value_ptr.*;
-        const n = nodes.items.len;
+        const positions = entry.value_ptr.*;
+        const n = positions.items.len;
         for (0..n - 1) |i| {
-            const xa: i32 = @intCast(nodes.items[i] % nx);
-            const ya: i32 = @intCast(nodes.items[i] / nx);
+            const xa: i32 = positions.items[i].x;
+            const ya: i32 = positions.items[i].y;
             for (i + 1..n) |j| {
-                const xb: i32 = @intCast(nodes.items[j] % nx);
-                const yb: i32 = @intCast(nodes.items[j] / nx);
-                var dx = xb - xa;
-                var dy = yb - ya;
-                for (0..2) |k| {
-                    if (k == 1) {
-                        dx = -dx;
-                        dy = -dy;
-                    }
-                    var x = xa;
-                    var y = ya;
-                    while (validIndex(x, y, nx, ny, &index)) {
-                        try antinodes.put(index, {});
-                        x += dx;
-                        y += dy;
-                    }
+                const xb: i32 = positions.items[j].x;
+                const yb: i32 = positions.items[j].y;
+                const dx = xb - xa;
+                const dy = yb - ya;
+                x = xa;
+                y = ya;
+                while (try add_antinode(&antinodes, x, y, nx, ny)) {
+                    x -= dx;
+                    y -= dy;
+                }
+                x = xb;
+                y = yb;
+                while (try add_antinode(&antinodes, x, y, nx, ny)) {
+                    x += dx;
+                    y += dy;
                 }
             }
         }
@@ -83,30 +92,28 @@ pub fn main() !void {
 
     var antennas = AntennaMap.init(allocator);
     defer antennas.deinit();
-    // var part2: u32 = 0;
     var nx: usize = 0;
-    var ny: usize = 0;
+    var ny: i32 = 0;
 
     var buffer: [1024]u8 = undefined;
     var buf_reader = std.io.bufferedReader(file.reader());
     var in_stream = buf_reader.reader();
+
     while (try in_stream.readUntilDelimiterOrEof(&buffer, '\n')) |line| {
-        if (line.len == 0) continue;
         nx = line.len;
-        for (line, 0..) |c, i| {
+        for (line, 0..) |c, x| {
             if (c == '.') continue;
-            const index = nx * ny + i;
             var v = try antennas.getOrPut(c);
             if (!v.found_existing) {
-                v.value_ptr.* = std.ArrayList(usize).init(allocator);
+                v.value_ptr.* = std.ArrayList(Position).init(allocator);
             }
-            try v.value_ptr.append(index);
+            try v.value_ptr.append(Position{ .x = @intCast(x), .y = ny });
         }
         ny += 1;
     }
-    const part1 = try antinodes1(&antennas, @intCast(nx), @intCast(ny));
+    const part1 = try count_antinodes(&antennas, @intCast(nx), ny);
     std.debug.print("Part 1: {}\n", .{part1});
-    const part2 = try antinodes2(&antennas, @intCast(nx), @intCast(ny));
+    const part2 = try count_antinodes2(&antennas, @intCast(nx), ny);
     std.debug.print("Part 2: {}\n", .{part2});
 
     var it = antennas.iterator();
