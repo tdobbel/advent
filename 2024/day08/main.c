@@ -50,59 +50,54 @@ void freeAntennaMap(AntennaMap *map) {
   free(map);
 }
 
-int validPosition(int x, int y, int nrows, int ncols) {
-  return x >= 0 && x < ncols && y >= 0 && y < nrows;
+int addAntinode(int *antinodes, int nx, int ny, int x, int y) {
+  if (x < 0 || x >= nx || y < 0 || y >= ny) {
+    return 0;
+  }
+  antinodes[y * nx + x] = 1;
+  return 1;
 }
 
-void findAntinodesPart1(AntennaMap *map, int index, int nrows, int ncols,
+void findAntinodesPart1(AntennaMap *map, int index, int ny, int nx,
                         int *antinodes) {
-  int y0, x0, y1, x1, dx, dy, x, y;
+  int yA, xA, yB, xB, dx, dy;
   Positions *pos = &map->antennas[index];
   for (int i = 0; i < pos->size - 1; ++i) {
+    yA = pos->nodes[i] / nx;
+    xA = pos->nodes[i] % nx;
     for (int j = i + 1; j < pos->size; ++j) {
-      y0 = pos->nodes[i] / ncols;
-      x0 = pos->nodes[i] % ncols;
-      y1 = pos->nodes[j] / ncols;
-      x1 = pos->nodes[j] % ncols;
-      dy = y1 - y0;
-      dx = x1 - x0;
-      x = x1 + dx;
-      y = y1 + dy;
-      if (validPosition(x, y, nrows, ncols)) {
-        antinodes[y * ncols + x] = 1;
-      }
-      x = x0 - dx;
-      y = y0 - dy;
-      if (validPosition(x, y, nrows, ncols)) {
-        antinodes[y * ncols + x] = 1;
-      }
+      yB = pos->nodes[j] / nx;
+      xB = pos->nodes[j] % nx;
+      dy = yB - yA;
+      dx = xB - xA;
+      addAntinode(antinodes, nx, ny, xB + dx, yB + dy);
+      addAntinode(antinodes, nx, ny, xA + dx, yA + dy);
     }
   }
 }
 
-void findAntinodesPart2(AntennaMap *map, int index, int nrows, int ncols,
+void findAntinodesPart2(AntennaMap *map, int index, int ny, int nx,
                         int *antinodes) {
-  int y0, x0, y1, x1, dx, dy, x, y;
+  int yA, xA, yB, xB, dx, dy, x, y;
   Positions *pos = &map->antennas[index];
   for (int i = 0; i < pos->size - 1; ++i) {
+    yA = pos->nodes[i] / nx;
+    xA = pos->nodes[i] % nx;
     for (int j = i + 1; j < pos->size; ++j) {
-      y0 = pos->nodes[i] / ncols;
-      x0 = pos->nodes[i] % ncols;
-      y1 = pos->nodes[j] / ncols;
-      x1 = pos->nodes[j] % ncols;
-      dy = y1 - y0;
-      dx = x1 - x0;
-      x = x1;
-      y = y1;
-      while (validPosition(x, y, nrows, ncols)) {
-        antinodes[y * ncols + x] = 1;
+      yB = pos->nodes[j] / nx;
+      xB = pos->nodes[j] % nx;
+      dy = yB - yA;
+      dx = xB - xA;
+      x = xB;
+      y = yB;
+      while (addAntinode(antinodes, nx, ny, x, y)) {
         x += dx;
         y += dy;
       }
-      x = x0;
-      y = y0;
-      while (validPosition(x, y, nrows, ncols)) {
-        antinodes[y * ncols + x] = 1;
+      x = xA;
+      y = yA;
+      while (addAntinode(antinodes, nx, ny, x, y)) {
+        antinodes[y * nx + x] = 1;
         x -= dx;
         y -= dy;
       }
