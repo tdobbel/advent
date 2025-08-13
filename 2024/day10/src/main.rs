@@ -1,27 +1,55 @@
+use std::collections::HashMap;
 use std::env;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
-use std::collections::HashMap;
 
+type Counter = HashMap<(usize, usize), usize>;
 
-fn find_trails(topo: &[usize], ncols: usize, index: usize, tails: &mut HashMap<usize,usize>) {
-    if topo[index] == 9 {
-        *tails.entry(index).or_insert(0) += 1;
+enum Direction {
+    Up,
+    Down,
+    Left,
+    Right,
+}
+
+fn get_neighbor(pos: (usize, usize), dir: &Direction) -> Option<(usize, usize)> {
+    let (x, y) = pos;
+    let neighbor = match dir {
+        Direction::Up => (x, y.checked_sub(1)?),
+        Direction::Down => (x, y + 1),
+        Direction::Left => (x.checked_sub(1)?, y),
+        Direction::Right => (x + 1, y),
+    };
+    Some(neighbor)
+}
+
+fn count_trails(topo: &[Vec<u8>], pos: (usize, usize), counter: &mut Counter) {
+    let value = topo[pos.1][pos.0];
+    if value == 9 {
+        *counter.entry(pos).or_insert(0) += 1;
         return;
     }
-    let y0 = (index / ncols) as i32;
-    let x0 = (index % ncols) as i32;
-    let ncols_ = ncols as i32;
-    let nrows = topo.len() as i32 / ncols_;
-    for (dx, dy) in [(-1,0), (1,0), (0,-1), (0,1)].iter() {
-        let x = x0 + dx;
-        let y = y0 + dy;
-        if x < 0 || x >= ncols_ || y < 0 || y >= nrows {
-            continue;
-        }
-        let index_ = (y * ncols_ + x) as usize;
-        if topo[index_] == topo[index] + 1 {
-            find_trails(topo, ncols, index_, tails);
+    let ny = topo.len();
+    let nx = topo[0].len();
+    let directions = [
+        Direction::Up,
+        Direction::Down,
+        Direction::Left,
+        Direction::Right,
+    ];
+    for dir in directions.iter() {
+        let (x, y) = match get_neighbor(pos, dir) {
+            Some(p) => {
+                if p.0 >= nx || p.1 >= ny {
+                    continue;
+                } else {
+                    p
+                }
+            }
+            None => continue,
+        };
+        if topo[y][x] == value + 1 {
+            count_trails(topo, (x, y), counter);
         }
     }
 }
@@ -30,29 +58,29 @@ fn main() {
     let args = env::args().nth(1).expect("Please provide an input file");
     let file = File::open(args).unwrap();
     let reader = BufReader::new(file);
-    let mut ncols: usize = 0;
-    let mut topo: Vec<usize> = Vec::new();
-    let mut seeds: Vec<usize> = Vec::new();
-    for (i, line) in reader.lines().enumerate() {
+    let mut topo: Vec<Vec<u8>> = Vec::new();
+    let mut seeds: Vec<(usize, usize)> = Vec::new();
+    for (y, line) in reader.lines().enumerate() {
         let line = line.unwrap();
-        ncols = line.len();
-        for (j, c) in line.chars().enumerate() {
-            let value = c.to_digit(10).unwrap() as usize;
-            topo.push(value);
+        let mut row: Vec<u8> = Vec::with_capacity(line.len());
+        for (x, c) in line.chars().enumerate() {
+            let value = c.to_digit(10).unwrap() as u8;
+            row.push(value);
             if value == 0 {
-                seeds.push(i*ncols+j);
+                seeds.push((x, y));
             }
         }
+        topo.push(row);
     }
-    let mut totalscore1: usize = 0;
-    let mut totalscore2: usize = 0;
-    let mut tails: HashMap<usize,usize>;
+
+    let mut part1 = 0;
+    let mut part2 = 0;
     for seed in seeds.iter() {
-        tails = HashMap::new();
-        find_trails(&topo, ncols, *seed, &mut tails);
-        totalscore2 += tails.values().sum::<usize>();
-        totalscore1 += tails.len(); 
+        let mut counter = HashMap::new();
+        count_trails(&topo, *seed, &mut counter);
+        part1 += counter.len();
+        part2 += counter.values().sum::<usize>()
     }
-    println!("Total score part 1: {}", totalscore1);
-    println!("Total score part 2: {}", totalscore2);
+    println!("Part 1: {}", part1);
+    println!("Part 2: {}", part2);
 }
