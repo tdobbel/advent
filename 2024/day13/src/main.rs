@@ -4,17 +4,17 @@ use std::env;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 
-fn solve_system(xa: i64, ya: i64, xb: i64, yb: i64, x: i64, y: i64) -> i64 {
+fn solve_system(xa: i64, ya: i64, xb: i64, yb: i64, x: i64, y: i64) -> Option<i64> {
     let det = xa * yb - ya * xb;
     if det == 0 {
-        return 0;
+        return None;
     }
     let na = (x * yb - y * xb) / det;
     let nb = (xa * y - ya * x) / det;
     if na < 0 || nb < 0 || na * xa + nb * xb != x || na * ya + nb * yb != y {
-        return 0;
+        return None;
     }
-    3 * na + nb
+    Some(3 * na + nb)
 }
 
 fn main() -> Result<()> {
@@ -47,15 +47,19 @@ fn main() -> Result<()> {
                 yb = y_value;
             }
             "Prize" => {
-                part1 += solve_system(xa, ya, xb, yb, x_value, y_value);
-                part2 += solve_system(
+                if let Some(n) = solve_system(xa, ya, xb, yb, x_value, y_value) {
+                    part1 += n;
+                }
+                if let Some(n) = solve_system(
                     xa,
                     ya,
                     xb,
                     yb,
                     x_value + 10000000000000,
                     y_value + 10000000000000,
-                );
+                ) {
+                    part2 += n;
+                }
             }
             _ => eprintln!("Could not parse line '{}'", line),
         }
