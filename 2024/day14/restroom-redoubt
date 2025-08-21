@@ -2,16 +2,17 @@
 
 nx=101
 ny=103
-# nx=11
-# ny=7
+max_tree_height=0
 
 declare -a robots
+declare -A grid
 
 iterate() {
     local x y u v i
     local n=${#robots[@]}
     for ((i = 0; i < n; ++i)); do
         read -r x y u v <<<"${robots[i]}"
+        ((grid["$x,$y"]--))
         ((x += u))
         if ((x < 0)); then
             ((x += nx))
@@ -25,6 +26,70 @@ iterate() {
             ((y -= ny))
         fi
         robots[i]="$x $y $u $v"
+        ((grid["$x,$y"]++))
+    done
+}
+
+plot-grid() {
+    local x y cntr
+    for ((y = 0; y < ny; ++y)); do
+        for ((x = 0; x < nx; ++x)); do
+            cntr=${grid["$x,$y"]}
+            if ((cntr == 0)); then
+                printf "."
+            else
+                printf "%d" "$cntr"
+            fi
+        done
+        echo
+    done
+}
+
+stability-score() {
+    ur=0
+    ul=0
+    dr=0
+    dl=0
+
+    ((xmid = nx / 2))
+    ((ymid = ny / 2))
+
+    for robot in "${robots[@]}"; do
+        read -r x y u v <<<"$robot"
+        if ((x < xmid)); then
+            ((y < ymid)) && ((++ul))
+            ((y > ymid)) && ((++dl))
+        elif ((x > xmid)); then
+            ((y < ymid)) && ((++ur))
+            ((y > ymid)) && ((++dr))
+        fi
+    done
+    echo "Part 1: $((ur * ul * dr * dl))"
+}
+
+find-largest-tree() {
+    local x y height x_start x_end valid cntr
+    for robot in "${robots[@]}"; do
+        read -r x y _ _ <<<"$robot"
+        height=1
+        ((x_start = x - 1))
+        ((x_end = x + 1))
+        while ((y < nx && x_start >= 0 && x_end < nx)); do
+            valid=1
+            for ((x = x_start; x <= x_end; x++)); do
+                cntr=${grid["$x,$y"]}
+                if ((cntr == 0)); then
+                    valid=0
+                    break
+                fi
+            done
+            ((valid == 0)) && break
+            ((height++))
+            ((y++))
+            ((x_start--))
+            ((x_end++))
+        done
+        ((height > max_tree_height)) && max_tree_height=$height
     done
 }
 
@@ -32,29 +97,23 @@ while read -r pos uv; do
     IFS=',' read -r x y <<<"${pos:2}"
     IFS=',' read -r u v <<<"${uv:2}"
     robots+=("$x $y $u $v")
+    ((grid["$x,$y"]++))
 done
 
 for ((i = 0; i < 100; ++i)); do
     iterate
 done
 
-ur=0
-ul=0
-dr=0
-dl=0
+stability-score
+find-largest-tree
 
-((xmid = nx / 2))
-((ymid = ny / 2))
-
-for robot in "${robots[@]}"; do
-    read -r x y u v <<<"$robot"
-    if ((x < xmid)); then
-        ((y < ymid)) && ((++ul))
-        ((y > ymid)) && ((++dl))
-    elif ((x > xmid)); then
-        ((y < ymid)) && ((++ur))
-        ((y > ymid)) && ((++dr))
-    fi
+part2=100
+while ((max_tree_height < 8)); do
+    ((part2 % 1000 == 0)) && echo "$part2"
+    iterate
+    find-largest-tree
+    ((part2++))
 done
 
-echo "$((ur * ul * dr * dl))"
+echo "Part2: $part2"
+plot-grid
