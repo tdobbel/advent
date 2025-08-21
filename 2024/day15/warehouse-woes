@@ -1,0 +1,243 @@
+#!/usr/bin/env bash
+
+declare -a objects
+declare -a state0
+declare -A warehouse
+declare -a motions
+startX=
+startY=
+robotX=
+robotY=
+
+ny=0
+nx=0
+parse_map=1
+
+plot-warehouse() {
+    local width="$1"
+    local x y xo i
+    for ((y = 0; y < ny; y++)); do
+        for ((x = 0; x < nx * width; x++)); do
+            if ((x == robotX && y == robotY)); then
+                printf '@'
+                continue
+            fi
+            i=${warehouse["$x,$y"]}
+            if ((i < 0)); then
+                printf '.'
+            else
+                IFS=',' read -r xo _ _ object_type <<<"${objects[$i]}"
+                if [[ "$object_type" == "W" ]]; then
+                    printf '#'
+                elif ((width == 1)); then
+                    printf 'O'
+                elif ((xo == x)); then
+                    printf '['
+                else
+                    printf ']'
+                fi
+            fi
+        done
+        echo
+    done
+}
+
+init-warehouse() {
+    local width="$1"
+    local i j n x y
+    warehouse=()
+    n=${#objects[@]}
+    for ((y = 0; y < ny; y++)); do
+        for ((x = 0; x < nx * width; x++)); do
+            warehouse["$x,$y"]=-1
+        done
+    done
+    for ((i = 0; i < n; i++)); do
+        IFS=',' read -r x y _ _ <<<"${objects[$i]}"
+        for ((j = 0; j < width; j++)); do
+            warehouse["$((x + j)),$y"]=$i
+        done
+    done
+}
+
+contains() {
+    local i
+    local item="$1"
+    shift
+    for i in "$@"; do
+        if [[ "$i" == "$item" ]]; then
+            return 0
+        fi
+    done
+    return 1
+}
+
+move-robot() {
+    local x y width object_type x_next y_next index n dx=0 dy=0
+    local moved queue
+    local motion="$1"
+    case "$1" in
+    '^')
+        dy=-1
+        ;;
+    '>')
+        dx=1
+        ;;
+    'v')
+        dy=1
+        ;;
+    '<')
+        dx=-1
+        ;;
+    *)
+        echo "Unknown motion"
+        exit 1
+        ;;
+    esac
+    # Robot does not hit any object
+    ((x = robotX + dx))
+    ((y = robotY + dy))
+    index=${warehouse["$x,$y"]}
+    if ((index == -1)); then
+        robotX=$x
+        robotY=$y
+        return
+    fi
+
+    # Find all objects that will be moved
+    declare -a moved
+    moved=("$index")
+    declare -a queue
+    while ((${#moved[@]} > 0)); do
+        index=${moved[0]}
+        moved=("${moved[@]:1}")
+        IFS=',' read -r x y width object_type <<<"${objects[$index]}"
+        if [[ "$object_type" == "W" ]]; then
+            # Wall, cannot move
+            return
+        fi
+        queue+=("$index")
+        if [[ "$motion" == ">" || "$motion" == "<" ]]; then
+            ((x_next = x + dx))
+            [[ "$motion" == ">" ]] && ((x_next += dx))
+            index=${warehouse["$x_next,$y"]}
+            ((index < 0)) && continue
+            if ! contains "$index" "${moved[@]}"; then
+                moved+=("$index")
+            fi
+        else
+            for ((w = 0; w < width; w++)); do
+                index=${warehouse["$((x + w)),$((y + dy))"]}
+                ((index < 0)) && continue
+                if ! contains "$index" "${moved[@]}"; then
+                    moved+=("$index")
+                fi
+            done
+        fi
+    done
+    # Move objects
+    while ((${#queue[@]} > 0)); do
+        index=${queue[-1]}
+        unset "queue[-1]"
+        IFS=',' read -r x y width object_type <<<"${objects[$index]}"
+        x_next=$((x + dx))
+        y_next=$((y + dy))
+        objects[index]="$x_next,$y_next,$width,$object_type"
+        for ((w = 0; w < width; w++)); do
+            warehouse["$((x + w)),$y"]=-1
+        done
+        for ((w = 0; w < width; w++)); do
+            warehouse["$((x_next + w)),$y_next"]=$index
+        done
+    done
+    ((robotX += dx))
+    ((robotY += dy))
+}
+
+compute-score() {
+    local object x y object_type
+    local score=0
+    for object in "${objects[@]}"; do
+        IFS=',' read -r x y _ object_type <<<"$object"
+        if [[ "$object_type" == "B" ]]; then
+            ((score += 100 * y + x))
+        fi
+    done
+    echo "Score: $score"
+}
+
+part1() {
+    local x y object_type
+    objects=()
+    for object in "${state0[@]}"; do
+        IFS=',' read -r x y object_type <<<"$object"
+        objects+=("$x,$y,1,$object_type")
+    done
+    init-warehouse 1
+    robotX=$startX
+    robotY=$startY
+    for motion in "${motions[@]}"; do
+        move-robot "$motion"
+    done
+    plot-warehouse 1
+    compute-score
+}
+
+part2() {
+    local x y width object_type
+    objects=()
+    for object in "${state0[@]}"; do
+        IFS=',' read -r x y object_type <<<"$object"
+        objects+=("$((x * 2)),$y,2,$object_type")
+    done
+    robotX=$((startX * 2))
+    robotY=$startY
+    init-warehouse 2
+    for motion in "${motions[@]}"; do
+        move-robot "$motion"
+    done
+    plot-warehouse 2
+    compute-score
+}
+
+main() {
+    while read -r line; do
+        if ((${#line} == 0)); then
+            parse_map=0
+            continue
+        fi
+        if ((parse_map == 1)); then
+            nx=${#line}
+            for ((x = 0; x < nx; x++)); do
+                c="${line:x:1}"
+                case "$c" in
+                '.')
+                    continue
+                    ;;
+                'O')
+                    state0+=("$x,$ny,B")
+                    ;;
+                '@')
+                    startX=$x
+                    startY=$ny
+                    ;;
+                '#')
+                    state0+=("$x,$ny,W")
+                    ;;
+                *)
+                    echo "Unknown character '$c' at ($x, $ny)" >&2
+                    exit 1
+                    ;;
+                esac
+            done
+            ((ny++))
+        else
+            for ((i = 0; i < ${#line}; i++)); do
+                motions+=("${line:i:1}")
+            done
+        fi
+    done
+    part1 && part2
+}
+
+main
