@@ -46,16 +46,16 @@ plot-grid() {
 }
 
 stability-score() {
-    ur=0
-    ul=0
-    dr=0
-    dl=0
-
+    local ur=0
+    local ul=0
+    local dr=0
+    local dl=0
+    local x y xmid ymid
     ((xmid = nx / 2))
     ((ymid = ny / 2))
 
     for robot in "${robots[@]}"; do
-        read -r x y u v <<<"$robot"
+        read -r x y _ _ <<<"$robot"
         if ((x < xmid)); then
             ((y < ymid)) && ((++ul))
             ((y > ymid)) && ((++dl))
@@ -103,11 +103,10 @@ done
 for ((i = 0; i < 100; ++i)); do
     iterate
 done
-
 stability-score
-find-largest-tree
 
 part2=100
+find-largest-tree
 while ((max_tree_height < 8)); do
     ((part2 % 1000 == 0)) && echo "$part2"
     iterate
