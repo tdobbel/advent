@@ -1,0 +1,60 @@
+#!/usr/bin/env bash
+
+nx=101
+ny=103
+# nx=11
+# ny=7
+
+declare -a robots
+
+iterate() {
+    local x y u v i
+    local n=${#robots[@]}
+    for ((i = 0; i < n; ++i)); do
+        read -r x y u v <<<"${robots[i]}"
+        ((x += u))
+        if ((x < 0)); then
+            ((x += nx))
+        elif ((x >= nx)); then
+            ((x -= nx))
+        fi
+        ((y += v))
+        if ((y < 0)); then
+            ((y += ny))
+        elif ((y >= ny)); then
+            ((y -= ny))
+        fi
+        robots[i]="$x $y $u $v"
+    done
+}
+
+while read -r pos uv; do
+    IFS=',' read -r x y <<<"${pos:2}"
+    IFS=',' read -r u v <<<"${uv:2}"
+    robots+=("$x $y $u $v")
+done
+
+for ((i = 0; i < 100; ++i)); do
+    iterate
+done
+
+ur=0
+ul=0
+dr=0
+dl=0
+
+((xmid = nx / 2))
+((ymid = ny / 2))
+
+for robot in "${robots[@]}"; do
+    read -r x y u v <<<"$robot"
+    if ((x < xmid)); then
+        ((y < ymid)) && ((++ul))
+        ((y > ymid)) && ((++dl))
+    elif ((x > xmid)); then
+        ((y < ymid)) && ((++ur))
+        ((y > ymid)) && ((++dr))
+    fi
+done
+
+echo "$((ur * ul * dr * dl))"
