@@ -5,7 +5,8 @@ const Position = struct {
     y: i32,
 };
 
-const AntennaMap = std.AutoHashMap(u8, std.ArrayList(Position));
+const ArrayList = std.array_list.Managed;
+const AntennaMap = std.AutoHashMap(u8, ArrayList(Position));
 const Antinodes = std.AutoHashMap(Position, void);
 const allocator = std.heap.c_allocator;
 
@@ -96,20 +97,21 @@ pub fn main() !void {
     var ny: i32 = 0;
 
     var buffer: [1024]u8 = undefined;
-    var buf_reader = std.io.bufferedReader(file.reader());
-    var in_stream = buf_reader.reader();
+    var reader = file.reader(&buffer);
 
-    while (try in_stream.readUntilDelimiterOrEof(&buffer, '\n')) |line| {
+    while (reader.interface.takeDelimiterExclusive('\n')) |line| {
         nx = line.len;
         for (line, 0..) |c, x| {
             if (c == '.') continue;
             var v = try antennas.getOrPut(c);
             if (!v.found_existing) {
-                v.value_ptr.* = std.ArrayList(Position).init(allocator);
+                v.value_ptr.* = ArrayList(Position).init(allocator);
             }
             try v.value_ptr.append(Position{ .x = @intCast(x), .y = ny });
         }
         ny += 1;
+    } else |err| if (err != error.EndOfStream) {
+        return err;
     }
     const part1 = try count_antinodes(&antennas, @intCast(nx), ny);
     std.debug.print("Part 1: {}\n", .{part1});

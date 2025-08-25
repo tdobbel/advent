@@ -1,7 +1,8 @@
 const std = @import("std");
 
 const allocator = std.heap.c_allocator;
-const AdjacencyList = std.AutoHashMap(usize, std.ArrayList(usize));
+const ArrayList = std.array_list.Managed;
+const AdjacencyList = std.AutoHashMap(usize, ArrayList(usize));
 const TriangleSet = std.AutoHashMap([3]usize, void);
 
 const Network = struct {
@@ -22,7 +23,7 @@ const Network = struct {
 pub fn add_to_key(adj: *AdjacencyList, key: usize, value: usize) !void {
     var entry = try adj.getOrPut(key);
     if (!entry.found_existing) {
-        entry.value_ptr.* = std.ArrayList(usize).init(allocator);
+        entry.value_ptr.* = ArrayList(usize).init(allocator);
     }
     try entry.value_ptr.append(value);
 }
@@ -50,7 +51,7 @@ pub fn contains(comptime T: anytype, arr: []T, value: T) bool {
 }
 
 pub fn count_triangles_node(network: *Network, depth: usize, nodes: [3]usize, triangles: *TriangleSet) !void {
-    const node1 = nodes[3-depth];
+    const node1 = nodes[3 - depth];
     const neighbors = network.adjacency.get(node1).?;
     if (depth == 1) {
         if (contains(usize, neighbors.items, nodes[0])) {
@@ -62,7 +63,7 @@ pub fn count_triangles_node(network: *Network, depth: usize, nodes: [3]usize, tr
     }
     for (neighbors.items) |node2| {
         var nodes_ = nodes;
-        nodes_[3-depth+1] = node2;
+        nodes_[3 - depth + 1] = node2;
         try count_triangles_node(network, depth - 1, nodes_, triangles);
     }
 }
@@ -76,7 +77,7 @@ pub fn find_max_clique(network: *Network) !void {
     }
     var largest: usize = 0;
     var best: []usize = undefined;
-    var start: usize = 0; 
+    var start: usize = 0;
     var stop: usize = 1;
     while (stop < n) {
         var added: bool = false;
@@ -120,7 +121,7 @@ pub fn find_max_clique(network: *Network) !void {
     std.debug.print("Part 2: {} ", .{largest});
     for (names, 0..) |name, i| {
         std.debug.print("{s}", .{name});
-        if ( i != largest - 1) {
+        if (i != largest - 1) {
             std.debug.print(",", .{});
         }
     }
@@ -137,13 +138,12 @@ pub fn main() !void {
     defer file.close();
 
     var buffer: [5096]u8 = undefined;
-    var buf_reader = std.io.bufferedReader(file.reader());
-    var in_stream = buf_reader.reader();
+    var reader = file.reader(&buffer);
 
     var node_map = std.AutoHashMap([2]u8, usize).init(allocator);
     var adj = AdjacencyList.init(allocator);
     var cntr: usize = 0;
-    while (try in_stream.readUntilDelimiterOrEof(&buffer, '\n')) |line| {
+    while (reader.interface.takeDelimiterExclusive('\n')) |line| {
         const node1 = [_]u8{ line[0], line[1] };
         const node2 = [_]u8{ line[3], line[4] };
         if (!node_map.contains(node1)) {
@@ -158,6 +158,8 @@ pub fn main() !void {
         const j = node_map.get(node2).?;
         try add_to_key(&adj, i, j);
         try add_to_key(&adj, j, i);
+    } else |err| if (err != error.EndOfStream) {
+        return err;
     }
     var network = try create_network(&node_map, adj);
     defer network.free();

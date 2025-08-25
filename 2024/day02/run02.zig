@@ -45,13 +45,12 @@ pub fn main() !void {
     const file = try cwd.openFile(file_name, .{});
     defer file.close();
     var buffer: [1024]u8 = undefined;
-    var buf_reader = std.io.bufferedReader(file.reader());
-    var in_stream = buf_reader.reader();
+    var reader = file.reader(&buffer);
     var numbers: [20]i32 = undefined;
     var size: u32 = 0;
     var part1: u32 = 0;
     var part2: u32 = 0;
-    while (try in_stream.readUntilDelimiterOrEof(&buffer, '\n')) |line| {
+    while (reader.interface.takeDelimiterExclusive('\n')) |line| {
         try parseLine(line, &numbers, &size);
         if (isSafe(numbers[0..size])) {
             part1 += 1;
@@ -59,7 +58,7 @@ pub fn main() !void {
         } else if (isSafeDampened(numbers[0..size])) {
             part2 += 1;
         }
-    }
+    } else |err| if (err != error.EndOfStream) return err;
     std.debug.print("Part 1: {}\n", .{part1});
     std.debug.print("Part 2: {}\n", .{part2});
 }

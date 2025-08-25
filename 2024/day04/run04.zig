@@ -1,5 +1,7 @@
 const std = @import("std");
 
+const ArrayList = std.array_list.Managed;
+
 pub fn isXMAS(word: [4]u8) bool {
     return std.mem.eql(u8, &word, "XMAS") or std.mem.eql(u8, &word, "SAMX");
 }
@@ -8,7 +10,7 @@ pub fn isMAS(word: [3]u8) bool {
     return std.mem.eql(u8, &word, "MAS") or std.mem.eql(u8, &word, "SAM");
 }
 
-pub fn countXMAS(grid: std.ArrayList([]u8), x: usize, y: usize, count: *u32) void {
+pub fn countXMAS(grid: ArrayList([]u8), x: usize, y: usize, count: *u32) void {
     var word: [4]u8 = undefined;
     const ny = grid.items.len;
     const nx = grid.items[y].len;
@@ -38,7 +40,7 @@ pub fn countXMAS(grid: std.ArrayList([]u8), x: usize, y: usize, count: *u32) voi
     }
 }
 
-pub fn isCrossMax(grid: std.ArrayList([]u8), x: usize, y: usize) bool {
+pub fn isCrossMax(grid: ArrayList([]u8), x: usize, y: usize) bool {
     if (x > grid.items[y].len - 3 or y > grid.items.len - 3) {
         return false;
     }
@@ -60,15 +62,16 @@ pub fn main() !void {
     const file = try cwd.openFile(file_name, .{});
     defer file.close();
     var buffer: [1024]u8 = undefined;
-    var buf_reader = std.io.bufferedReader(file.reader());
-    var in_stream = buf_reader.reader();
+    var reader = file.reader(&buffer);
     const allocator = std.heap.c_allocator;
-    var grid = std.ArrayList([]u8).init(allocator);
+    var grid = ArrayList([]u8).init(allocator);
     defer grid.deinit();
-    while (try in_stream.readUntilDelimiterOrEof(&buffer, '\n')) |line| {
+    while (reader.interface.takeDelimiterExclusive('\n')) |line| {
         const line_copy = try allocator.dupe(u8, line);
         errdefer allocator.free(line_copy);
         try grid.append(line_copy);
+    } else |err| if (err != error.EndOfStream) {
+        return err;
     }
     var part1: u32 = 0;
     var part2: u32 = 0;

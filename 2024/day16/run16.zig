@@ -1,6 +1,7 @@
 const std = @import("std");
 
 const allocator = std.heap.c_allocator;
+const ArrayList = std.array_list.Managed;
 
 const Direction = enum {
     Up,
@@ -9,7 +10,7 @@ const Direction = enum {
     Right,
 };
 
-pub fn free_array_list(comptime T: anytype, array: *std.ArrayList([]T)) void {
+pub fn free_array_list(comptime T: anytype, array: *ArrayList([]T)) void {
     for (array.items) |row| {
         allocator.free(row);
     }
@@ -57,7 +58,7 @@ const Maze = struct {
     ny: usize,
     start: Position,
     end: Position,
-    walls: *std.ArrayList([]bool),
+    walls: *ArrayList([]bool),
 
     pub fn distance_to_end(self: *const Maze, pos: Position) usize {
         return abs_diff(pos.x, self.end.x) + abs_diff(pos.y, self.end.y);
@@ -91,7 +92,7 @@ pub fn create_path(
     };
 }
 
-pub fn add_candidates(maze: *const Maze, path: *Path, visited: []bool, queue: *std.ArrayList(Path)) !void {
+pub fn add_candidates(maze: *const Maze, path: *Path, visited: []bool, queue: *ArrayList(Path)) !void {
     const tail = path.tail();
     const directions = [_]Direction{
         path.direction,
@@ -123,7 +124,7 @@ pub fn add_candidates(maze: *const Maze, path: *Path, visited: []bool, queue: *s
     }
 }
 
-pub fn free_queue(queue: *std.ArrayList(Path)) void {
+pub fn free_queue(queue: *ArrayList(Path)) void {
     for (queue.items) |path| {
         allocator.free(path.positions);
     }
@@ -131,7 +132,7 @@ pub fn free_queue(queue: *std.ArrayList(Path)) void {
 }
 
 pub fn solve_maze(maze: *const Maze, start_pos: Position, start_dir: Direction, start_score: usize, visited: []bool) !?Path {
-    var queue = std.ArrayList(Path).init(allocator);
+    var queue = ArrayList(Path).init(allocator);
     defer free_queue(&queue);
     try queue.append(try create_path(
         start_score,
@@ -173,7 +174,7 @@ pub fn solve_part2(maze: *const Maze, ref: *const Path) !usize {
     defer allocator.free(visited);
     var start_pos = maze.start;
     var start_score: usize = 0;
-    var start_dir = Direction.Right; 
+    var start_dir = Direction.Right;
 
     var hash_set = std.AutoHashMap(Position, void).init(allocator);
     defer hash_set.deinit();
@@ -193,7 +194,7 @@ pub fn solve_part2(maze: *const Maze, ref: *const Path) !usize {
         }
         @memset(visited, false);
         const next_pos = ref.positions[i];
-        const directions = [_]Direction {
+        const directions = [_]Direction{
             start_dir,
             turn_left(start_dir),
             turn_right(start_dir),
@@ -221,9 +222,9 @@ pub fn main() !void {
     defer file.close();
 
     var buffer: [1024]u8 = undefined;
-    var buf_reader = std.io.bufferedReader(file.reader());
-    var in_stream = buf_reader.reader();
-    var walls = std.ArrayList([]bool).init(allocator);
+    var reader = file.reader(&buffer);
+
+    var walls = ArrayList([]bool).init(allocator);
     var maze = Maze{
         .nx = 0,
         .ny = 0,
@@ -231,7 +232,7 @@ pub fn main() !void {
         .end = undefined,
         .walls = &walls,
     };
-    while (try in_stream.readUntilDelimiterOrEof(&buffer, '\n')) |line| {
+    while (reader.interface.takeDelimiterExclusive('\n')) |line| {
         var wall_row: []bool = try allocator.alloc(bool, line.len);
         maze.nx = line.len;
         for (line, 0..) |c, x| {
@@ -244,6 +245,8 @@ pub fn main() !void {
         }
         try maze.walls.append(wall_row);
         maze.ny += 1;
+    } else |err| if (err != error.EndOfStream) {
+        return err;
     }
     defer free_array_list(bool, &walls);
     const path = try solve_part1(&maze);

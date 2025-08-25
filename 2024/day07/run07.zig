@@ -56,25 +56,25 @@ pub fn main() !void {
     const file = try cwd.openFile(file_name, .{});
     defer file.close();
     var buffer: [1024]u8 = undefined;
-    var buf_reader = std.io.bufferedReader(file.reader());
-    var in_stream = buf_reader.reader();
+    var reader = file.reader(&buffer);
     var numbers: [64]u64 = undefined;
     var size: usize = 0;
     var part1: u64 = 0;
     var part2: u64 = 0;
-    const op1 = [_]Operation{Operation.add, Operation.multiply};
-    const op2 = [_]Operation{Operation.add, Operation.multiply, Operation.concatenate};
-    while (try in_stream.readUntilDelimiterOrEof(&buffer, '\n')) |line| {
+    const op1 = [_]Operation{ Operation.add, Operation.multiply };
+    const op2 = [_]Operation{ Operation.add, Operation.multiply, Operation.concatenate };
+    while (reader.interface.takeDelimiterExclusive('\n')) |line| {
         const isep = std.mem.indexOf(u8, line, ":").?;
         const result = try std.fmt.parseInt(u64, line[0..isep], 10);
         try parseNumbers(line[isep + 1 ..], &numbers, &size);
         if (ispossible(result, numbers[1..size], &op1, numbers[0])) {
             part1 += result;
             part2 += result;
-        }
-        else if (ispossible(result, numbers[1..size], &op2, numbers[0])) {
+        } else if (ispossible(result, numbers[1..size], &op2, numbers[0])) {
             part2 += result;
         }
+    } else |err| if (err != error.EndOfStream) {
+        return err;
     }
     std.debug.print("Part 1: {}\n", .{part1});
     std.debug.print("Part 2: {}\n", .{part2});

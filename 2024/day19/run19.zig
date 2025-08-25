@@ -1,8 +1,9 @@
 const std = @import("std");
 
 const allocator = std.heap.c_allocator;
+const ArrayList = std.array_list.Managed;
 
-const Towels = std.AutoHashMap(usize, std.ArrayList([]u8));
+const Towels = std.AutoHashMap(usize, ArrayList([]u8));
 
 pub fn freeTowels(towels: *Towels) void {
     var it = towels.iterator();
@@ -20,7 +21,7 @@ pub fn parseLine(towels: *Towels, line: []const u8) !void {
     while (it.next()) |item| {
         var entry = try towels.getOrPut(item.len);
         if (!entry.found_existing) {
-            entry.value_ptr.* = std.ArrayList([]u8).init(allocator);
+            entry.value_ptr.* = ArrayList([]u8).init(allocator);
         }
         try entry.value_ptr.append(try allocator.dupe(u8, item));
     }
@@ -59,8 +60,7 @@ pub fn main() !void {
     defer file.close();
 
     var buffer: [5096]u8 = undefined;
-    var buf_reader = std.io.bufferedReader(file.reader());
-    var in_stream = buf_reader.reader();
+    var reader = file.reader(&buffer);
 
     var towels = Towels.init(allocator);
     defer freeTowels(&towels);
@@ -68,7 +68,7 @@ pub fn main() !void {
     var first: bool = true;
     var part1: usize = 0;
     var part2: u64 = 0;
-    while (try in_stream.readUntilDelimiterOrEof(&buffer, '\n')) |line| {
+    while (reader.interface.takeDelimiterExclusive('\n')) |line| {
         if (first) {
             try parseLine(&towels, line);
             first = false;
@@ -80,6 +80,8 @@ pub fn main() !void {
             part1 += 1;
             part2 += n;
         }
+    } else |err| if (err != error.EndOfStream) {
+        return err;
     }
     std.debug.print("Part 1: {}\n", .{part1});
     std.debug.print("Part 2: {}\n", .{part2});

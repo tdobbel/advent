@@ -1,6 +1,7 @@
 const std = @import("std");
 
 const allocator = std.heap.c_allocator;
+const ArrayList = std.array_list.Managed;
 
 const Direction = enum(usize) {
     Up,
@@ -29,7 +30,7 @@ pub fn nextPosition(x: usize, y: usize, heading: Direction) struct { i32, i32 } 
     }
 }
 
-pub fn moveGuard(x0: usize, y0: usize, obstacles: std.ArrayList([]bool), visited: []bool, history: [4][]bool) !bool {
+pub fn moveGuard(x0: usize, y0: usize, obstacles: ArrayList([]bool), visited: []bool, history: [4][]bool) !bool {
     const ny = obstacles.items.len;
     const nx = obstacles.items[0].len;
     var x = x0;
@@ -68,17 +69,16 @@ pub fn main() !void {
     const file = try cwd.openFile(file_name, .{});
     defer file.close();
 
-    var obstacles = std.ArrayList([]bool).init(allocator);
+    var obstacles = ArrayList([]bool).init(allocator);
     defer obstacles.deinit();
 
     var buffer: [1024]u8 = undefined;
-    var buf_reader = std.io.bufferedReader(file.reader());
-    var in_stream = buf_reader.reader();
+    var reader = file.reader(&buffer);
 
     var ny: usize = 0;
     var startX: usize = undefined;
     var startY: usize = undefined;
-    while (try in_stream.readUntilDelimiterOrEof(&buffer, '\n')) |line| {
+    while (reader.interface.takeDelimiterExclusive('\n')) |line| {
         var row: []bool = try allocator.alloc(bool, line.len);
         errdefer allocator.free(row);
         for (line, 0..) |c, i| {
@@ -90,6 +90,8 @@ pub fn main() !void {
         }
         try obstacles.append(row);
         ny += 1;
+    } else |err| if (err != error.EndOfStream) {
+        return err;
     }
 
     var history: [4][]bool = undefined;

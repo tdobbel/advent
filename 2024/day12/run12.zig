@@ -1,6 +1,7 @@
 const std = @import("std");
 
 const allocator = std.heap.c_allocator;
+const ArrayList = std.array_list.Managed;
 
 const Direction = enum {
     Up,
@@ -9,7 +10,7 @@ const Direction = enum {
     Right,
 };
 
-pub fn free_array_list(comptime T: anytype, array: *std.ArrayList([]T)) void {
+pub fn free_array_list(comptime T: anytype, array: *ArrayList([]T)) void {
     for (array.items) |row| {
         allocator.free(row);
     }
@@ -42,8 +43,8 @@ const Fence = struct {
 const Plots = struct {
     nx: usize,
     ny: usize,
-    plots: std.ArrayList([]u8),
-    visited: std.ArrayList([]bool),
+    plots: ArrayList([]u8),
+    visited: ArrayList([]bool),
 
     pub fn next_pos(self: *Plots, x: usize, y: usize, dir: Direction) ?[2]usize {
         var x_new = x;
@@ -99,7 +100,7 @@ pub fn get_fence(x: usize, y: usize, dir: Direction) Fence {
     return Fence{ .x = xs, .y = ys };
 }
 
-pub fn count_corners(fences: *std.ArrayList(Fence)) usize {
+pub fn count_corners(fences: *ArrayList(Fence)) usize {
     var ifirst: usize = 0;
     var icurr: usize = 0;
     var count: usize = 0;
@@ -127,7 +128,7 @@ pub fn count_corners(fences: *std.ArrayList(Fence)) usize {
     return count;
 }
 
-pub fn compute_price(plots: *Plots, x: usize, y: usize, area: *usize, perimeter: *usize, fences: *std.ArrayList(Fence)) !void {
+pub fn compute_price(plots: *Plots, x: usize, y: usize, area: *usize, perimeter: *usize, fences: *ArrayList(Fence)) !void {
     plots.visited.items[y][x] = true;
     area.* += 1;
     const directions = [_]Direction{ .Up, .Down, .Left, .Right };
@@ -159,16 +160,18 @@ pub fn main() !void {
     defer file.close();
 
     var buffer: [1024]u8 = undefined;
-    var buf_reader = std.io.bufferedReader(file.reader());
-    var in_stream = buf_reader.reader();
-    var grid = std.ArrayList([]u8).init(allocator);
-    var visited = std.ArrayList([]bool).init(allocator);
-    while (try in_stream.readUntilDelimiterOrEof(&buffer, '\n')) |line| {
+    var reader = file.reader(&buffer);
+
+    var grid = ArrayList([]u8).init(allocator);
+    var visited = ArrayList([]bool).init(allocator);
+    while (reader.interface.takeDelimiterExclusive('\n')) |line| {
         const grid_row: []u8 = try allocator.dupe(u8, line[0..line.len]);
         try grid.append(grid_row);
         const visited_row: []bool = try allocator.alloc(bool, line.len);
         @memset(visited_row, false);
         try visited.append(visited_row);
+    } else |err| if (err != error.EndOfStream) {
+        return err;
     }
     var plots = Plots{ .nx = grid.items[0].len, .ny = grid.items.len, .plots = grid, .visited = visited };
     defer plots.free();
@@ -177,7 +180,7 @@ pub fn main() !void {
     for (0..plots.ny) |y| {
         for (0..plots.nx) |x| {
             if (plots.visited.items[y][x]) continue;
-            var fences = std.ArrayList(Fence).init(allocator);
+            var fences = ArrayList(Fence).init(allocator);
             defer fences.deinit();
             var area: usize = 0;
             var perimeter: usize = 0;

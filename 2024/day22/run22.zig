@@ -40,8 +40,7 @@ pub fn main() !void {
     defer file.close();
 
     var buffer: [64]u8 = undefined;
-    var buf_reader = std.io.bufferedReader(file.reader());
-    var in_stream = buf_reader.reader();
+    var reader = file.reader(&buffer);
 
     var seq: [4]i32 = undefined;
     var prev: usize = undefined;
@@ -51,7 +50,7 @@ pub fn main() !void {
     var best_seq: [4]i32 = undefined;
     var gains = GainMap.init(allocator);
     defer gains.deinit();
-    while (try in_stream.readUntilDelimiterOrEof(&buffer, '\n')) |line| {
+    while (reader.interface.takeDelimiterExclusive('\n')) |line| {
         var secret = try std.fmt.parseInt(u64, line, 10);
         prev = ones_digit(secret);
         var i: usize = 0;
@@ -86,6 +85,8 @@ pub fn main() !void {
                 best_seq = entry.key_ptr.*;
             }
         }
+    } else |err| if (err != error.EndOfStream) {
+        return err;
     }
 
     std.debug.print("Part 1: {d}\n", .{part1});

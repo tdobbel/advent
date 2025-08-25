@@ -28,8 +28,7 @@ pub fn main() !void {
     const file  = try cwd.openFile(file_name, .{});
     defer file.close();
     var buffer: [1024]u8 = undefined;
-    var buf_reader = std.io.bufferedReader(file.reader());
-    var in_stream = buf_reader.reader();
+    var reader = file.reader(&buffer);
     var numbers: [2]u32 = undefined;
     var arena = std.heap.ArenaAllocator.init(std.heap.c_allocator);
     defer arena.deinit();
@@ -37,12 +36,12 @@ pub fn main() !void {
     const left = try  allocator.alloc(u32, 1024);
     const right = try allocator.alloc(u32, 1024);
     var cntr: u32 = 0;
-    while (try in_stream.readUntilDelimiterOrEof(&buffer, '\n'))  |line| {
+    while (reader.interface.takeDelimiterExclusive('\n'))  |line| {
         try parseLine(line, &numbers);
         left[cntr] = numbers[0];
         right[cntr] = numbers[1];
         cntr += 1;
-    }
+    } else |err| if (err != error.EndOfStream) return err;
     std.mem.sort(u32, left[0..cntr], {}, comptime std.sort.asc(u32));
     std.mem.sort(u32, right[0..cntr], {}, comptime std.sort.asc(u32));
     var part1: u32 = 0;

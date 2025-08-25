@@ -1,6 +1,7 @@
 const std = @import("std");
 
 const allocator = std.heap.c_allocator;
+const ArrayList = std.array_list.Managed;
 const OutsideError = error{OutOfBounds};
 const Direction = enum {
     Up,
@@ -9,7 +10,7 @@ const Direction = enum {
     Right,
 };
 
-pub fn free_topo(topo: *std.ArrayList([]u8)) void {
+pub fn free_topo(topo: *ArrayList([]u8)) void {
     for (topo.items) |row| {
         allocator.free(row);
     }
@@ -48,7 +49,7 @@ pub fn next_pos(x: usize, y: usize, dir: Direction, nx: usize, ny: usize) ![2]us
     return [2]usize{ x_new, y_new };
 }
 
-pub fn count_trails(topo: *std.ArrayList([]u8), index: usize, trails: *std.AutoHashMap(usize, usize)) !void {
+pub fn count_trails(topo: *ArrayList([]u8), index: usize, trails: *std.AutoHashMap(usize, usize)) !void {
     const nx = topo.items[0].len;
     const ny = topo.items.len;
     const x = index % nx;
@@ -90,13 +91,13 @@ pub fn main() !void {
     defer file.close();
 
     var buffer: [1024]u8 = undefined;
-    var buf_reader = std.io.bufferedReader(file.reader());
-    var in_stream = buf_reader.reader();
-    var topo = std.ArrayList([]u8).init(allocator);
+    var reader = file.reader(&buffer);
+
+    var topo = ArrayList([]u8).init(allocator);
     defer free_topo(&topo);
-    var start_positions = std.ArrayList(usize).init(allocator);
+    var start_positions = ArrayList(usize).init(allocator);
     defer start_positions.deinit();
-    while (try in_stream.readUntilDelimiterOrEof(&buffer, '\n')) |line| {
+    while (reader.interface.takeDelimiterExclusive('\n')) |line| {
         var row: []u8 = try allocator.alloc(u8, line.len);
         for (line, 0..) |c, i| {
             row[i] = c - '0';
@@ -106,6 +107,8 @@ pub fn main() !void {
             }
         }
         try topo.append(row);
+    } else |err| if (err != error.EndOfStream) {
+        return err;
     }
 
     var part1: usize = 0;
