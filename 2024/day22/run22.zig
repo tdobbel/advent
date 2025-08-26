@@ -1,6 +1,6 @@
 const std = @import("std");
 
-const GainMap = std.AutoHashMap([4]i32, usize);
+const GainMap = std.AutoHashMap(u32, usize);
 
 pub fn mix(x: u64, y: u64) u64 {
     return x ^ y;
@@ -22,11 +22,22 @@ fn ones_digit(x: u64) usize {
     return res;
 }
 
-fn get_diff(x: usize, y: *usize) i32 {
-    const x_: i32 = @intCast(x);
-    const y_: i32 = @intCast(y.*);
+fn get_diff(x: usize, y: *usize) i8 {
+    const x_: i8 = @intCast(x);
+    const y_: i8 = @intCast(y.*);
     y.* = x;
     return x_ - y_;
+}
+
+fn decode_sequence(seq: u32) [4]i8 {
+    var res = [4]i8{ 0, 0, 0, 0 };
+    var encoded = seq;
+    for (0..4) |i| {
+        const num: i8 = @intCast(encoded & 0x1f);
+        res[3 - i] = num - 9;
+        encoded = encoded >> 5;
+    }
+    return res;
 }
 
 pub fn main() !void {
@@ -42,33 +53,30 @@ pub fn main() !void {
     var buffer: [64]u8 = undefined;
     var reader = file.reader(&buffer);
 
-    var seq: [4]i32 = undefined;
+    var seq: u32 = 0;
     var prev: usize = undefined;
-    var curr: usize = undefined;
+    var price: usize = undefined;
+    var num: u32 = undefined;
     var part1: u64 = 0;
     var part2: usize = 0;
-    var best_seq: [4]i32 = undefined;
+    var best_seq: u32 = undefined;
     var gains = GainMap.init(allocator);
     defer gains.deinit();
     while (reader.interface.takeDelimiterExclusive('\n')) |line| {
         var secret = try std.fmt.parseInt(u64, line, 10);
         prev = ones_digit(secret);
-        var i: usize = 0;
         var buyer = GainMap.init(allocator);
         defer buyer.deinit();
-        while (i < 3) : (i += 1) {
+        seq = 0;
+        for (0..2000) |i| {
             secret = next_number(secret);
-            seq[i] = get_diff(ones_digit(secret), &prev);
-        }
-        while (i < 2000) : (i += 1) {
-            secret = next_number(secret);
-            curr = ones_digit(secret);
-            seq[3] = get_diff(curr, &prev);
-            if (!buyer.contains(seq)) {
-                try buyer.put(seq, curr);
-            }
-            for (0..3) |j| {
-                seq[j] = seq[j + 1];
+            price = ones_digit(secret);
+            num = @intCast(get_diff(price, &prev) + 9);
+            seq = ((seq << 5) | num) & 0xfffff;
+            if (i < 3) continue;
+            const entry = try buyer.getOrPut(seq);
+            if (!entry.found_existing) {
+                entry.value_ptr.* = price;
             }
         }
         part1 += secret;
@@ -90,5 +98,6 @@ pub fn main() !void {
     }
 
     std.debug.print("Part 1: {d}\n", .{part1});
-    std.debug.print("Part 2: {d} ({d}, {d}, {d}, {d})\n", .{ part2, best_seq[0], best_seq[1], best_seq[2], best_seq[3] });
+    const decoded = decode_sequence(best_seq);
+    std.debug.print("Part 2: {d} ({}, {}, {}, {})\n", .{ part2, decoded[0], decoded[1], decoded[2], decoded[3] });
 }
