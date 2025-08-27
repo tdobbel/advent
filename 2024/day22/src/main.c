@@ -5,7 +5,7 @@
 #define CAPACITY 7919
 
 struct node {
-  int numbers[4];
+  uint32_t encoded;
   int gain;
   struct node *next;
 };
@@ -13,25 +13,9 @@ struct node {
 typedef struct {
   int capacity;
   int best;
-  int best_seq[4];
+  uint32_t best_sequence;
   struct node **arr;
 } seq_map;
-
-int same_sequence(int x[4], int y[4]) {
-  for (int i = 0; i < 4; ++i) {
-    if (x[i] != y[i])
-      return 0;
-  }
-  return 1;
-}
-
-int hash_sequence(seq_map *sm, int num[4]) {
-  int index = 0, factor = 31;
-  for (int i = 0; i < 4; ++i) {
-    index = (31 * index + (num[i] + 9)) % sm->capacity;
-  }
-  return index;
-}
 
 seq_map *create_sequence_map(int capacity) {
   seq_map *sm = malloc(sizeof(seq_map));
@@ -44,12 +28,10 @@ seq_map *create_sequence_map(int capacity) {
   return sm;
 }
 
-struct node *create_node(int num[4], int gain) {
+struct node *create_node(uint32_t encoded, int gain) {
   struct node *seq = (struct node *)malloc(sizeof(struct node));
   seq->gain = gain;
-  for (int i = 0; i < 4; ++i) {
-    seq->numbers[i] = num[i];
-  }
+  seq->encoded = encoded;
   seq->next = NULL;
   return seq;
 }
@@ -70,9 +52,9 @@ void free_sequence_map(seq_map *sm) {
   free(sm);
 }
 
-void insert_sequence(seq_map *sm, int num[4], int gain) {
-  int index = hash_sequence(sm, num);
-  struct node *seq = create_node(num, gain);
+void insert_sequence(seq_map *sm, uint32_t encoded, int gain) {
+  int index = encoded % sm->capacity;
+  struct node *seq = create_node(encoded, gain);
   if (sm->arr[index] == NULL) {
     sm->arr[index] = seq;
     return;
@@ -81,40 +63,54 @@ void insert_sequence(seq_map *sm, int num[4], int gain) {
   sm->arr[index] = seq;
 }
 
-struct node *get_sequence(seq_map *sm, int num[4]) {
-  int index = hash_sequence(sm, num);
+struct node *get_sequence(seq_map *sm, uint32_t encoded) {
+  int index = encoded % sm->capacity;
   struct node *seq = sm->arr[index];
   while (seq != NULL) {
-    if (same_sequence(seq->numbers, num))
+    if (seq->encoded == encoded)
       return seq;
     seq = seq->next;
   }
   return NULL;
 }
 
-void add_sequence_map(seq_map *sfrom, seq_map *sto) {
-  for (int i = 0; i < sfrom->capacity; ++i) {
-    struct node *seq = sfrom->arr[i];
+struct node *get_or_put(seq_map *sm, uint32_t key, int default_value) {
+  int index = key % sm->capacity;
+  struct node *seq = sm->arr[index];
+  while (seq != NULL) {
+    if (seq->encoded == key) {
+      return seq;
+    }
+    seq = seq->next;
+  }
+  insert_sequence(sm, key, default_value);
+  return sm->arr[index];
+}
+
+void add_sequence_map(seq_map *map_from, seq_map *map_to) {
+  for (int i = 0; i < map_from->capacity; ++i) {
+    struct node *seq = map_from->arr[i];
     while (seq != NULL) {
       struct node *next = seq->next;
       seq->next = NULL;
       // Add to other
-      struct node *seq_to = get_sequence(sto, seq->numbers);
-      if (seq_to == NULL) {
-        insert_sequence(sto, seq->numbers, 0);
-        seq_to = get_sequence(sto, seq->numbers);
-      }
-      seq_to->gain += seq->gain;
-      if (seq_to->gain > sto->best) {
-        sto->best = seq_to->gain;
-        for (int k = 0; k < 4; ++k) {
-          sto->best_seq[k] = seq_to->numbers[k];
-        }
+      struct node *dst = get_or_put(map_to, seq->encoded, 0);
+      dst->gain += seq->gain;
+      if (dst->gain > map_to->best) {
+        map_to->best = dst->gain;
+        map_to->best_sequence = seq->encoded;
       }
       free(seq);
       seq = next;
     }
-    sfrom->arr[i] = NULL;
+    map_from->arr[i] = NULL;
+  }
+}
+
+void decode_sequence(uint32_t encoded, int *decoded) {
+  for (int i = 0; i < 4; ++i) {
+    decoded[3 - i] = (encoded & 0x1f) - 9;
+    encoded = encoded >> 5;
   }
 }
 
@@ -147,38 +143,33 @@ int main(int argc, char *argv[]) {
   uint64_t part1 = 0;
   seq_map *sm = create_sequence_map(CAPACITY);
   seq_map *buyer = create_sequence_map(CAPACITY);
-  int prev, curr, ifound;
-  int num[4] = {0, 0, 0, 0};
+  int prev, price, num, ifound;
+  int encoded;
   int counter = 0;
   while (fgets(buffer, 256, file)) {
     sscanf(buffer, "%lu", &secret);
     prev = ones_digit(secret);
-    for (int i = 0; i < 3; i++) {
+    encoded = 0;
+    for (int i = 0; i < 2000; i++) {
       secret = next_number(secret);
-      curr = ones_digit(secret);
-      num[i] = curr - prev;
-      prev = curr;
-    }
-    for (int i = 3; i < 2000; ++i) {
-      secret = next_number(secret);
-      curr = ones_digit(secret);
-      num[3] = curr - prev;
-      prev = curr;
-      if (get_sequence(buyer, num) == NULL) {
-        insert_sequence(buyer, num, curr);
-      }
-      for (int j = 0; j < 3; ++j) {
-        num[j] = num[j + 1];
-      }
+      price = ones_digit(secret);
+      encoded = ((encoded << 5) + (price - prev + 9)) & 0xfffff;
+      prev = price;
+      if (i < 3)
+        continue;
+      get_or_put(buyer, encoded, price);
     }
     part1 += secret;
     add_sequence_map(buyer, sm);
   }
   fclose(file);
 
+  int decoded[4];
+  decode_sequence(sm->best_sequence, decoded);
+
   printf("Part 1: %lu\n", part1);
   printf("Part 2: best gain of %d with sequence (%d,%d,%d,%d)\n", sm->best,
-         sm->best_seq[0], sm->best_seq[1], sm->best_seq[2], sm->best_seq[3]);
+         decoded[0], decoded[1], decoded[2], decoded[3]);
 
   free_sequence_map(sm);
   free_sequence_map(buyer);
