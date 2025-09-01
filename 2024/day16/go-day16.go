@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 	"slices"
+	"math"
 )
 
 const (
@@ -111,7 +112,7 @@ func showPath(path Path, isWall [][]bool, end Position) {
 	}
 }
 
-func findShortestPath(start, end Position, heading int, isWall [][]bool) (Path, error) {
+func findShortestPath(start, end Position, heading, baseScore int, isWall [][]bool, maxValue int) (Path, error) {
 	ny := len(isWall)
 	nx := len(isWall[0])
 	var visited = make([][]bool, ny)
@@ -122,7 +123,7 @@ func findShortestPath(start, end Position, heading int, isWall [][]bool) (Path, 
 	startPath := Path{
 		positions: []Position{start},
 		heading:   heading,
-		score:     0,
+		score:     baseScore,
 		distance:  distance(start, end),
 	}
 	var shortestPath Path
@@ -142,6 +143,9 @@ func findShortestPath(start, end Position, heading int, isWall [][]bool) (Path, 
 			}
 		}
 		shortestPath = queue[minCostIndex]
+		if shortestPath.score > maxValue {
+			return shortestPath, fmt.Errorf("Exceeded max value of %d", maxValue)
+		}
 		pos = shortestPath.getCurrentPosition()
 		// showPath(shortestPath, isWall, end)
 		queue = slices.Delete(queue, minCostIndex, minCostIndex+1)
@@ -220,7 +224,9 @@ func main() {
 		return
 	}
 
-	shortestPath, err := findShortestPath(startPos, endPos, East, isWall)
+	maxValue := math.MaxInt
+
+	shortestPath, err := findShortestPath(startPos, endPos, East, 0, isWall, maxValue)
 	if err != nil {
 		log.Fatal(err)
 		return
@@ -243,8 +249,8 @@ func main() {
 	for i := range shortestPath.getSize() - 2 {
 		pos := shortestPath.positions[i+1]
 		isWall[pos.y][pos.x] = true
-		shortest, err := findShortestPath(start, endPos, heading, isWall)
-		if err == nil && baseScore+shortest.score == minScore {
+		shortest, err := findShortestPath(start, endPos, heading, baseScore, isWall, minScore)
+		if err == nil {
 			for _, p := range shortest.positions {
 				isShortest[p.y][p.x] = true
 			}
