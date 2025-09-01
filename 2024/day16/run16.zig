@@ -17,6 +17,22 @@ pub fn free_array_list(comptime T: anytype, array: *ArrayList([]T)) void {
     array.deinit();
 }
 
+pub fn create_boolean_2d_array(nx: usize, ny: usize) ![][]bool {
+    var array = try allocator.alloc([]bool, nx);
+    for (0..ny) |i| {
+        array[i] = try allocator.alloc(bool, nx);
+        @memset(array[i], false);
+    }
+    return array;
+}
+
+pub fn free_2d_array(comptime T: anytype, array: [][]T) void {
+    for (array) |row| {
+        allocator.free(row);
+    }
+    allocator.free(array);
+}
+
 pub fn turn_right(dir: Direction) Direction {
     return switch (dir) {
         .Up => .Right,
@@ -53,26 +69,35 @@ pub fn abs_diff(a: usize, b: usize) usize {
     return if (a > b) a - b else b - a;
 }
 
-const Maze = struct {
-    nx: usize,
-    ny: usize,
-    start: Position,
-    end: Position,
-    walls: *ArrayList([]bool),
-
-    pub fn distance_to_end(self: *const Maze, pos: Position) usize {
-        return abs_diff(pos.x, self.end.x) + abs_diff(pos.y, self.end.y);
-    }
-};
+pub fn direction_from_positions(a: Position, b: Position) Direction {
+    if (a.x < b.x) return .Right;
+    if (a.x > b.x) return .Left;
+    if (a.y < b.y) return .Down;
+    return .Up;
+}
 
 const Path = struct {
     score: usize,
     distance: usize,
-    direction: Direction,
+    heading: Direction,
     positions: []Position,
 
-    pub fn tail(self: *Path) Position {
+    pub fn last_position(self: *const Path) Position {
         return self.positions[self.positions.len - 1];
+    }
+
+    pub fn new_positions(self: *const Path, extra_pos: Position) ![]Position {
+        const n = self.positions.len;
+        var new_pos = try allocator.alloc(Position, n + 1);
+        for (self.positions, 0..) |pos, i| {
+            new_pos[i] = pos;
+        }
+        new_pos[n] = extra_pos;
+        return new_pos;
+    }
+
+    pub fn get_size(self: *const Path) usize {
+        return self.positions.len;
     }
 };
 
@@ -87,41 +112,9 @@ pub fn create_path(
     return Path{
         .score = score,
         .distance = distance,
-        .direction = direction,
+        .heading = direction,
         .positions = positions,
     };
-}
-
-pub fn add_candidates(maze: *const Maze, path: *Path, visited: []bool, queue: *ArrayList(Path)) !void {
-    const tail = path.tail();
-    const directions = [_]Direction{
-        path.direction,
-        turn_left(path.direction),
-        turn_right(path.direction),
-    };
-    const n = path.positions.len;
-    for (directions) |dir| {
-        const next_pos = tail.next(dir);
-        const index = next_pos.y * maze.nx + next_pos.x;
-        if (maze.walls.items[next_pos.y][next_pos.x] or visited[index]) {
-            continue;
-        }
-        visited[index] = true;
-        var new_score = path.score + 1;
-        if (dir != path.direction) new_score += 1000;
-        var positions = try allocator.alloc(Position, n + 1);
-        for (path.positions, 0..) |pos, i| {
-            positions[i] = pos;
-        }
-        positions[n] = next_pos;
-        const new_path = Path{
-            .score = new_score,
-            .distance = maze.distance_to_end(next_pos),
-            .direction = dir,
-            .positions = positions,
-        };
-        try queue.append(new_path);
-    }
 }
 
 pub fn free_queue(queue: *ArrayList(Path)) void {
@@ -131,23 +124,53 @@ pub fn free_queue(queue: *ArrayList(Path)) void {
     queue.deinit();
 }
 
-pub fn solve_maze(maze: *const Maze, start_pos: Position, start_dir: Direction, start_score: usize, visited: []bool) !?Path {
+pub fn get_distance(a: Position, b: Position) usize {
+    return abs_diff(a.x, b.x) + abs_diff(a.y, b.y);
+}
+
+pub fn find_shortest_path(start_pos: Position, end_pos: Position, heading: Direction, start_score: usize, is_wall: [][]bool, max_score: ?usize) !?Path {
     var queue = ArrayList(Path).init(allocator);
     defer free_queue(&queue);
+    var visited = try create_boolean_2d_array(is_wall[0].len, is_wall.len);
+    defer free_2d_array(bool, visited);
     try queue.append(try create_path(
         start_score,
-        maze.distance_to_end(start_pos),
-        start_dir,
+        get_distance(start_pos, end_pos),
+        heading,
         start_pos,
     ));
+
     while (queue.items.len > 0) {
-        var best = queue.pop().?;
-        const pos = best.tail();
-        if (std.meta.eql(pos, maze.end)) {
-            return best;
+        var shortest = queue.pop().?;
+        const pos = shortest.last_position();
+        if (std.meta.eql(pos, end_pos)) {
+            return shortest;
         }
-        try add_candidates(maze, &best, visited, &queue);
-        defer allocator.free(best.positions);
+        defer allocator.free(shortest.positions);
+        if (max_score != null and shortest.score > max_score.?) {
+            return null;
+        }
+        const directions = [_]Direction{
+            shortest.heading,
+            turn_left(shortest.heading),
+            turn_right(shortest.heading),
+        };
+        for (directions) |new_heading| {
+            const next_pos = pos.next(new_heading);
+            if (is_wall[next_pos.y][next_pos.x] or visited[next_pos.y][next_pos.x]) {
+                continue;
+            }
+            visited[next_pos.y][next_pos.x] = true;
+            var new_score = shortest.score + 1;
+            if (new_heading != shortest.heading) new_score += 1000;
+            const new_path = Path{
+                .score = new_score,
+                .distance = get_distance(next_pos, end_pos),
+                .heading = new_heading,
+                .positions = try shortest.new_positions(next_pos),
+            };
+            try queue.append(new_path);
+        }
         std.mem.sort(Path, queue.items, {}, struct {
             pub fn lessThan(_: void, a: Path, b: Path) bool {
                 return (a.score + a.distance) > (b.score + b.distance);
@@ -155,61 +178,6 @@ pub fn solve_maze(maze: *const Maze, start_pos: Position, start_dir: Direction, 
         }.lessThan);
     }
     return null;
-}
-
-pub fn solve_part1(maze: *const Maze) !?Path {
-    const visited = try allocator.alloc(bool, maze.nx * maze.ny);
-    defer allocator.free(visited);
-    return solve_maze(maze, maze.start, Direction.Right, 0, visited);
-}
-
-pub fn add_positions(hash_set: *std.AutoHashMap(Position, void), path: *const Path) !void {
-    for (path.positions) |p| {
-        try hash_set.put(p, {});
-    }
-}
-
-pub fn solve_part2(maze: *const Maze, ref: *const Path) !usize {
-    const visited = try allocator.alloc(bool, maze.nx * maze.ny);
-    defer allocator.free(visited);
-    var start_pos = maze.start;
-    var start_score: usize = 0;
-    var start_dir = Direction.Right;
-
-    var hash_set = std.AutoHashMap(Position, void).init(allocator);
-    defer hash_set.deinit();
-    try add_positions(&hash_set, ref);
-
-    for (1..ref.positions.len - 1) |i| {
-        for (0..i + 1) |j| {
-            const pos = ref.positions[j];
-            visited[pos.y * maze.nx + pos.x] = true;
-        }
-        const path = try solve_maze(maze, start_pos, start_dir, start_score, visited);
-        if (path != null) {
-            defer allocator.free(path.?.positions);
-            if (path.?.score <= ref.score) {
-                try add_positions(&hash_set, &path.?);
-            }
-        }
-        @memset(visited, false);
-        const next_pos = ref.positions[i];
-        const directions = [_]Direction{
-            start_dir,
-            turn_left(start_dir),
-            turn_right(start_dir),
-        };
-        for (directions) |dir| {
-            const p = start_pos.next(dir);
-            if (std.meta.eql(p, next_pos)) {
-                start_pos = next_pos;
-                start_score += if (dir == start_dir) 1 else 1001;
-                start_dir = dir;
-                break;
-            }
-        }
-    }
-    return hash_set.count();
 }
 
 pub fn main() !void {
@@ -224,34 +192,66 @@ pub fn main() !void {
     var buffer: [1024]u8 = undefined;
     var reader = file.reader(&buffer);
 
-    var walls = ArrayList([]bool).init(allocator);
-    var maze = Maze{
-        .nx = 0,
-        .ny = 0,
-        .start = undefined,
-        .end = undefined,
-        .walls = &walls,
-    };
+    var is_wall = ArrayList([]bool).init(allocator);
+    var start_pos: Position = undefined;
+    var end_pos: Position = undefined;
+    var ny: usize = 0;
     while (reader.interface.takeDelimiterExclusive('\n')) |line| {
         var wall_row: []bool = try allocator.alloc(bool, line.len);
-        maze.nx = line.len;
         for (line, 0..) |c, x| {
             wall_row[x] = c == '#';
             if (c == 'S') {
-                maze.start = Position{ .x = x, .y = maze.ny };
+                start_pos = Position{ .x = x, .y = ny };
             } else if (c == 'E') {
-                maze.end = Position{ .x = x, .y = maze.ny };
+                end_pos = Position{ .x = x, .y = ny };
             }
         }
-        try maze.walls.append(wall_row);
-        maze.ny += 1;
+        try is_wall.append(wall_row);
+        ny += 1;
     } else |err| if (err != error.EndOfStream) {
         return err;
     }
-    defer free_array_list(bool, &walls);
-    const path = try solve_part1(&maze);
-    defer allocator.free(path.?.positions);
-    std.debug.print("Part 1: {}\n", .{path.?.score});
-    const part2 = try solve_part2(&maze, &path.?);
+    defer free_array_list(bool, &is_wall);
+
+
+    const shortest_ = try find_shortest_path(start_pos, end_pos, .Right, 0, is_wall.items, null);
+    const shortest = shortest_.?;
+    defer allocator.free(shortest.positions);
+    std.debug.print("Part 1: {}\n", .{shortest.score});
+
+    const min_score = shortest.score;
+    var start_score: usize = 0;
+    var start = start_pos;
+    var heading: Direction = .Right;
+    const nx = is_wall.items[0].len;
+    var is_shortest = try create_boolean_2d_array(nx, ny);
+    defer free_2d_array(bool, is_shortest);
+    for (shortest.positions) |p| {
+        is_shortest[p.y][p.x] = true;
+    }
+    for (0..shortest.get_size() - 2) |i| {
+        const pos = shortest.positions[i + 1];
+        is_wall.items[pos.y][pos.x] = true;
+        const path = try find_shortest_path(start, end_pos, heading, start_score, is_wall.items, min_score); 
+        if (path != null) {
+            for (path.?.positions) |p| {
+                is_shortest[p.y][p.x] = true;
+            }
+        }
+        is_wall.items[start.y][start.x] = false;
+        start_score += 1;
+        const new_dir = direction_from_positions(start, pos);
+        if (new_dir != heading) {
+            start_score += 1000;
+            heading = new_dir;
+        }
+        start = pos;
+    }
+    var part2: usize = 0;
+    for (0..ny) |y| {
+        for (0..nx) |x| {
+            part2 += if (is_shortest[y][x]) 1 else 0;
+        }
+    }
     std.debug.print("Part 2: {}\n", .{part2});
 }
