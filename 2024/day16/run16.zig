@@ -99,6 +99,10 @@ const Path = struct {
     pub fn get_size(self: *const Path) usize {
         return self.positions.len;
     }
+
+    pub fn get_cost(self: *const Path) usize {
+        return self.score + self.distance;
+    }
 };
 
 pub fn create_path(
@@ -141,7 +145,16 @@ pub fn find_shortest_path(start_pos: Position, end_pos: Position, heading: Direc
     ));
 
     while (queue.items.len > 0) {
-        var shortest = queue.pop().?;
+        var min_index: usize = 0;
+        var min_cost: usize = queue.items[0].get_cost();
+        for (1..queue.items.len) |i| {
+            const cost = queue.items[i].get_cost();
+            if (cost < min_cost) {
+                min_cost = cost;
+                min_index = i;
+            }
+        }
+        var shortest = queue.orderedRemove(min_index);
         const pos = shortest.last_position();
         if (std.meta.eql(pos, end_pos)) {
             return shortest;
@@ -171,11 +184,6 @@ pub fn find_shortest_path(start_pos: Position, end_pos: Position, heading: Direc
             };
             try queue.append(new_path);
         }
-        std.mem.sort(Path, queue.items, {}, struct {
-            pub fn lessThan(_: void, a: Path, b: Path) bool {
-                return (a.score + a.distance) > (b.score + b.distance);
-            }
-        }.lessThan);
     }
     return null;
 }
