@@ -17,6 +17,12 @@ enum ObjectType {
     Box,
 }
 
+struct ObjectBase {
+    object_type: ObjectType,
+    x: usize,
+    y: usize,
+}
+
 struct Object {
     object_type: ObjectType,
     x: usize,
@@ -25,34 +31,14 @@ struct Object {
 }
 
 impl Object {
-    pub fn double_width(&self) -> Object {
-        Object {
-            object_type: self.object_type.clone(),
-            x: self.x * 2,
-            y: self.y,
-            width: self.width * 2,
+    fn from_object_base(base: &ObjectBase, width: usize) -> Self {
+        Self {
+            object_type: base.object_type.clone(),
+            x: base.x * width,
+            y: base.y,
+            width,
         }
     }
-}
-
-fn parse_direction(c: char) -> Direction {
-    match c {
-        '^' => Direction::Up,
-        'v' => Direction::Down,
-        '<' => Direction::Left,
-        '>' => Direction::Right,
-        _ => panic!("Unexpected character: '{}'", c),
-    }
-}
-
-fn create_grid(objects: &[Object], nx: usize, ny: usize) -> Vec<Vec<Option<usize>>> {
-    let mut grid = vec![vec![None; nx]; ny];
-    for (i, o) in objects.iter().enumerate() {
-        for j in 0..o.width {
-            grid[o.y][o.x + j] = Some(i);
-        }
-    }
-    grid
 }
 
 fn next_pos(x: usize, y: usize, direction: &Direction) -> (usize, usize) {
@@ -64,138 +50,212 @@ fn next_pos(x: usize, y: usize, direction: &Direction) -> (usize, usize) {
     }
 }
 
-fn find_moved_objects(
-    grid: &[Vec<Option<usize>>],
-    objects: &[Object],
-    pos: (usize, usize),
-    direction: &Direction,
-    todo: &mut Vec<usize>,
-    blocked: &mut bool,
-) {
-    let (x, y) = next_pos(pos.0, pos.1, direction);
-    let iobj = match grid[y][x] {
-        Some(i) => i,
-        None => return,
-    };
-    let o = &objects[iobj];
-    match o.object_type {
-        ObjectType::Wall => {
-            *blocked = true;
-            return;
+struct Warehouse {
+    objects: Vec<Object>,
+    grid: Vec<Vec<Option<usize>>>,
+}
+
+impl Warehouse {
+    fn new(object_bases: &[ObjectBase], width: usize, nx: usize, ny: usize) -> Self {
+        let mut grid = vec![vec![None; nx * width]; ny];
+        let mut objects: Vec<Object> = Vec::with_capacity(object_bases.len());
+        for (i, base) in object_bases.iter().enumerate() {
+            let obj = Object::from_object_base(base, width);
+            for iw in 0..obj.width {
+                grid[obj.y][obj.x + iw] = Some(i);
+            }
+            objects.push(obj);
         }
-        ObjectType::Box => (),
+        Warehouse { objects, grid }
     }
-    if todo.contains(&iobj) {
-        return;
+
+    fn summed_gps_score(&self) -> usize {
+        self.objects
+            .iter()
+            .map(|o| match o.object_type {
+                ObjectType::Wall => 0,
+                ObjectType::Box => 100 * o.y + o.x,
+            })
+            .sum()
     }
-    todo.push(iobj);
-    if direction == &Direction::Left || direction == &Direction::Right {
-        let pos = if o.width == 1 {
-            (x, y)
-        } else {
-            next_pos(x, y, direction)
+
+    fn update_grid(&mut self, moved_indices: &[usize], direction: &Direction) {
+        for i in moved_indices.iter() {
+            let obj = &mut self.objects[*i];
+            for iw in 0..obj.width {
+                self.grid[obj.y][obj.x + iw] = None;
+            }
+            let (x_new, y_new) = next_pos(obj.x, obj.y, direction);
+            obj.x = x_new;
+            obj.y = y_new;
+        }
+        for i in moved_indices.iter() {
+            let obj = &self.objects[*i];
+            for iw in 0..obj.width {
+                self.grid[obj.y][obj.x + iw] = Some(*i);
+            }
+        }
+    }
+
+    fn move_robot(&mut self, robot_x: &mut usize, robot_y: &mut usize, direction: &Direction) {
+        let (x, y) = next_pos(*robot_x, *robot_y, direction);
+        let object_index = match self.grid[y][x] {
+            Some(i) => i,
+            None => {
+                *robot_x = x;
+                *robot_y = y;
+                return;
+            }
         };
-        find_moved_objects(grid, objects, pos, direction, todo, blocked);
-    } else {
-        for j in 0..o.width {
-            find_moved_objects(grid, objects, (o.x + j, o.y), direction, todo, blocked);
+        let mut queue: Vec<usize> = vec![object_index];
+        let mut todo: Vec<usize> = Vec::new();
+        while let Some(i) = queue.pop() {
+            let obj = &self.objects[i];
+            match obj.object_type {
+                ObjectType::Box => (),
+                ObjectType::Wall => return,
+            }
+            if todo.contains(&i) {
+                continue;
+            }
+            todo.push(i);
+            match *direction {
+                Direction::Up | Direction::Down => {
+                    for iw in 0..obj.width {
+                        let (x_next, y_next) = next_pos(obj.x + iw, obj.y, direction);
+                        if let Some(i_next) = self.grid[y_next][x_next] {
+                            queue.push(i_next);
+                        }
+                    }
+                }
+                Direction::Left => {
+                    let (x_next, y_next) = next_pos(obj.x, obj.y, direction);
+                    if let Some(i_next) = self.grid[y_next][x_next] {
+                        queue.push(i_next);
+                    }
+                }
+                Direction::Right => {
+                    let (x_next, y_next) = next_pos(obj.x + obj.width - 1, obj.y, direction);
+                    if let Some(i_next) = self.grid[y_next][x_next] {
+                        queue.push(i_next);
+                    }
+                }
+            }
+        }
+        self.update_grid(&todo, direction);
+        *robot_x = x;
+        *robot_y = y;
+    }
+
+    #[allow(dead_code)]
+    fn show(&self, x_robot: usize, y_robot: usize) {
+        let ny = self.grid.len();
+        let nx = self.grid[0].len();
+        for y in 0..ny {
+            for x in 0..nx {
+                if x == x_robot && y == y_robot {
+                    print!("@");
+                    continue;
+                }
+                if let Some(i) = self.grid[y][x] {
+                    let obj = &self.objects[i];
+                    match obj.object_type {
+                        ObjectType::Wall => print!("#"),
+                        ObjectType::Box => {
+                            if obj.width == 1 {
+                                print!("O");
+                            } else if x == obj.x {
+                                print!("[");
+                            } else {
+                                print!("]");
+                            }
+                        }
+                    }
+                } else {
+                    print!(".");
+                }
+            }
+            println!();
         }
     }
 }
 
-fn move_robot(
-    grid: &mut [Vec<Option<usize>>],
-    objects: &mut [Object],
-    robot: &mut (usize, usize),
-    direction: &Direction,
-) {
-    let mut todo: Vec<usize> = Vec::new();
-    let mut blocked = false;
-    find_moved_objects(grid, objects, *robot, direction, &mut todo, &mut blocked);
-    if blocked {
-        return;
+fn parse_direction(c: char) -> Result<Direction> {
+    match c {
+        '^' => Ok(Direction::Up),
+        'v' => Ok(Direction::Down),
+        '<' => Ok(Direction::Left),
+        '>' => Ok(Direction::Right),
+        _ => Err(anyhow::anyhow!("Invalid direction character: {}", c)),
     }
-    for i in todo.iter() {
-        let obj = &objects[*i];
-        for j in 0..obj.width {
-            grid[obj.y][obj.x + j] = None;
-        }
-    }
-    for i in todo.iter() {
-        let obj = &mut objects[*i];
-        (obj.x, obj.y) = next_pos(obj.x, obj.y, direction);
-        for j in 0..obj.width {
-            grid[obj.y][obj.x + j] = Some(*i);
-        }
-    }
-    (robot.0, robot.1) = next_pos(robot.0, robot.1, direction);
 }
 
-fn gps_score(objects: &[Object]) -> usize {
-    objects
-        .iter()
-        .map(|o| match o.object_type {
-            ObjectType::Wall => 0,
-            ObjectType::Box => 100 * o.y + o.x,
-        })
-        .sum()
+fn solve_puzzle(
+    base: &[ObjectBase],
+    nx: usize,
+    ny: usize,
+    start_x: usize,
+    start_y: usize,
+    width: usize,
+    moves: &[Direction],
+) -> usize {
+    let mut x_robot = start_x * width;
+    let mut y_robot = start_y;
+    let mut warehouse = Warehouse::new(base, width, nx, ny);
+    for direction in moves.iter() {
+        warehouse.move_robot(&mut x_robot, &mut y_robot, direction);
+    }
+    warehouse.summed_gps_score()
 }
 
 fn main() -> Result<()> {
     let filename = args().nth(1).expect("Missing input file");
     let file = File::open(filename)?;
     let reader = BufReader::new(file);
-    let mut lines = reader.lines();
-    let mut objects: Vec<Object> = Vec::new();
+    let mut object_positions: Vec<ObjectBase> = Vec::new();
     let mut x_start = usize::MAX;
     let mut y_start = usize::MAX;
+    let mut parse_grid = true;
+    let mut moves: Vec<Direction> = Vec::new();
     let mut ny = 0;
     let mut nx = 0;
-    while let Some(line) = lines.next() {
+    for line in reader.lines() {
         let line = line?;
         if line.is_empty() {
-            break;
+            parse_grid = false;
+            continue;
         }
-        nx = line.len();
-        for (x, c) in line.chars().enumerate() {
-            match c {
-                '@' => (x_start, y_start) = (x, ny),
-                '.' => continue,
-                '#' => objects.push(Object {
-                    object_type: ObjectType::Wall,
-                    x,
-                    y: ny,
-                    width: 1,
-                }),
-                'O' => objects.push(Object {
-                    object_type: ObjectType::Box,
-                    x,
-                    y: ny,
-                    width: 1,
-                }),
-                _ => panic!("Unexpected character '{}'", c),
+        if parse_grid {
+            nx = line.len();
+            for (x, c) in line.chars().enumerate() {
+                match c {
+                    '@' => (x_start, y_start) = (x, ny),
+                    '.' => continue,
+                    '#' => object_positions.push(ObjectBase {
+                        object_type: ObjectType::Wall,
+                        x,
+                        y: ny,
+                    }),
+                    'O' => object_positions.push(ObjectBase {
+                        object_type: ObjectType::Box,
+                        x,
+                        y: ny,
+                    }),
+                    _ => return Err(anyhow::anyhow!("Invalid character in input: {}", c)),
+                }
+            }
+            ny += 1;
+        } else {
+            for c in line.chars() {
+                moves.push(parse_direction(c)?);
             }
         }
-        ny += 1;
     }
 
-    let mut robot = (x_start, y_start);
-    let mut grid = create_grid(&objects, nx, ny);
-    let mut robot2 = (x_start * 2, y_start);
-    let mut objects2: Vec<Object> = objects.iter().map(|o| o.double_width()).collect();
-    let mut grid2 = create_grid(&objects2, nx * 2, ny);
-
-    while let Some(line) = lines.next() {
-        let line = line?;
-        for c in line.chars() {
-            let dir = parse_direction(c);
-            move_robot(&mut grid, &mut objects, &mut robot, &dir);
-            move_robot(&mut grid2, &mut objects2, &mut robot2, &dir);
-        }
-    }
-
-    println!("Part 1: {}", gps_score(&objects));
-    println!("Part 2: {}", gps_score(&objects2));
+    let part1 = solve_puzzle(&object_positions, nx, ny, x_start, y_start, 1, &moves);
+    println!("Part 1: {}", part1);
+    let part2 = solve_puzzle(&object_positions, nx, ny, x_start, y_start, 2, &moves);
+    println!("Part 2: {}", part2);
 
     Ok(())
 }
