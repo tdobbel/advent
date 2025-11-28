@@ -19,7 +19,7 @@ while read -r depth; do
     sum1="$sum2"
     sum2="${values[0]}"
     values=("${values[1]}" "${values[2]}" 0)
-    ((line >= 4 && sum2 > sum1)) && ((part2++))
+    ((line > 3 && sum2 > sum1)) && ((part2++))
 done
 
 echo "Part 1: $part1"
