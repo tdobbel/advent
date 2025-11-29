@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+
+x=0
+y=0
+aim=0
+
+while read -r dir n; do
+    case "$dir" in
+    "forward")
+        ((x += n))
+        ((y += aim * n))
+        ;;
+    "down")
+        ((aim += n))
+        ;;
+    "up")
+        ((aim -= n))
+        ;;
+    *)
+        echo "Unknown direction '$dir'"
+        exit 1
+        ;;
+    esac
+done
+
+printf "Part 1: %d\n" "$((x * aim))"
+printf "Part 2: %d\n" "$((x * y))"
