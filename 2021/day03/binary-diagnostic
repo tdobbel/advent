@@ -4,7 +4,7 @@ nchar=0
 declare -a filtered
 
 filter-position() {
-    local fun="$1"
+    local flag_oxygen="$1"
     local i="$2"
     local ones=()
     local zeros=()
@@ -18,18 +18,10 @@ filter-position() {
     done
     local n_ones="${#ones[@]}"
     local n_zeros="${#zeros[@]}"
-    if [[ "$fun" == "max" ]]; then
-        if ((n_ones >= n_zeros)); then
-            filtered=("${ones[@]}")
-        else
-            filtered=("${zeros[@]}")
-        fi
+    if (((flag_oxygen == 1) ^ (n_ones < n_zeros))); then
+        filtered=("${ones[@]}")
     else
-        if ((n_zeros <= n_ones)); then
-            filtered=("${zeros[@]}")
-        else
-            filtered=("${ones[@]}")
-        fi
+        filtered=("${zeros[@]}")
     fi
 }
 
@@ -76,11 +68,11 @@ main() {
     printf "Part 1: %d\n" $((gamma * epsilon))
 
     filtered=("${report[@]}")
-    run-filter "max"
+    run-filter 1
     oxygen=$((2#${filtered[0]}))
 
     filtered=("${report[@]}")
-    run-filter "min"
+    run-filter 0
     co2=$((2#${filtered[0]}))
 
     printf "Part 2: %d\n" $((oxygen * co2))
