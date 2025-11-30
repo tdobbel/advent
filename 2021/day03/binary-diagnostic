@@ -1,0 +1,89 @@
+#!/usr/bin/env bash
+
+nchar=0
+declare -a filtered
+
+filter-position() {
+    local fun="$1"
+    local i="$2"
+    local ones=()
+    local zeros=()
+    local line
+    for line in "${filtered[@]}"; do
+        if [[ "${line:$i:1}" == "1" ]]; then
+            ones+=("$line")
+        else
+            zeros+=("$line")
+        fi
+    done
+    local n_ones="${#ones[@]}"
+    local n_zeros="${#zeros[@]}"
+    if [[ "$fun" == "max" ]]; then
+        if ((n_ones >= n_zeros)); then
+            filtered=("${ones[@]}")
+        else
+            filtered=("${zeros[@]}")
+        fi
+    else
+        if ((n_zeros <= n_ones)); then
+            filtered=("${zeros[@]}")
+        else
+            filtered=("${ones[@]}")
+        fi
+    fi
+}
+
+run-filter() {
+    local fun="$1"
+    for ((i = 0; i < nchar; i++)); do
+        filter-position "$fun" "$i"
+        ((${#filtered[@]} == 1)) && break
+    done
+}
+
+main() {
+    local nline=0
+    local report=()
+    while read -r line; do
+        nchar="${#line}"
+        if ((nline == 0)); then
+            for ((i = 0; i < n; ++i)); do
+                counter+=(0)
+            done
+        fi
+        report+=("$line")
+        for ((i = 0; i < nchar; i++)); do
+            ((counter[i] += "${line:i:1}"))
+        done
+        ((nline++))
+    done
+
+    local gamma=0
+    local epsilon=0
+    local half
+
+    ((half = nline / 2))
+
+    for n in "${counter[@]}"; do
+        ((gamma <<= 1))
+        ((epsilon <<= 1))
+        if ((n > half)); then
+            ((gamma++))
+        else
+            ((epsilon++))
+        fi
+    done
+    printf "Part 1: %d\n" $((gamma * epsilon))
+
+    filtered=("${report[@]}")
+    run-filter "max"
+    oxygen=$((2#${filtered[0]}))
+
+    filtered=("${report[@]}")
+    run-filter "min"
+    co2=$((2#${filtered[0]}))
+
+    printf "Part 2: %d\n" $((oxygen * co2))
+}
+
+main
