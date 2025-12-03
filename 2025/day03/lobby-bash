@@ -1,0 +1,49 @@
+#!/usr/bin/env bash
+
+imax=
+joltage=
+
+argmax() {
+    local values="$1"
+    local vmax=0
+    local n="${#values}"
+    local v i
+    imax=0
+    for ((i = 0; i < n; i++)); do
+        v="${values:i:1}"
+        if ((v > vmax)); then
+            imax="$i"
+            vmax="$v"
+        fi
+    done
+}
+
+max-joltage() {
+    local n_battery="$1"
+    local values="$2"
+    local size nmax n vmax
+    joltage=0
+    for ((n=n_battery; n > 0; n--)); do
+        size="${#values}"
+        ((nmax = size - n + 1))
+        argmax "${values:0:nmax}"
+        vmax=${values:imax:1}
+        ((joltage = joltage * 10 + vmax))
+        values=${values:$((imax+1)):size}
+    done
+}
+
+main() {
+    part1=0
+    part2=0
+    while read -r bank; do
+        max-joltage 2 "${bank[@]}"
+        ((part1 += joltage))
+        max-joltage 12 "${bank[@]}"
+        ((part2 += joltage))
+    done
+    echo "Part1: $part1"
+    echo "Part2: $part2"
+}
+
+main
