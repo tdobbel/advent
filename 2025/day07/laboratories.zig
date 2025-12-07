@@ -116,7 +116,7 @@ pub fn main() !void {
     while (it.next()) |_| {
         part1 += 1;
     }
-    std.debug.print("Part1: {}\n", .{part1});
+    std.debug.print("Part 1: {}\n", .{part1});
 
     var y = ny - 1;
     while (y > 0) : (y -= 1) {
@@ -135,5 +135,5 @@ pub fn main() !void {
             }
         }
     }
-    std.debug.print("Part2: {}\n", .{root.counter});
+    std.debug.print("Part 2: {}\n", .{root.counter});
 }
