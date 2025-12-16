@@ -235,37 +235,70 @@ pub fn least_squares(allocator: std.mem.Allocator, a: [][]f32, b: []f32, atol: f
     return x;
 }
 
-pub fn solve_part2(machine: *const Machine, x0: []const f32, sol: []u16, ic: usize, nmove: u16, best: *u16) !void {
-    if (ic == machine.buttons.len) {
-        for (sol, 0..) |s, i| {
-            if (s != machine.requirements[i]) {
-                return;
+pub fn gaussian_elimination(a: [][]f32, b: []f32) void {
+    const m = a.len;
+    const n = a[0].len;
+    var h: usize = 0;
+    var k: usize = 0;
+    while (h < m and k < n) {
+        var imax: usize = h;
+        for (h..m) |i| {
+            if (@abs(a[i][k]) > @abs(a[imax][k])) {
+                imax = i;
             }
         }
-        if (nmove < best.*) {
-            best.* = nmove;
+        if (std.math.approxEqAbs(f32, a[imax][k], 0, 1e-4)) {
+            k += 1;
+            continue;
         }
-        return;
-    }
-    const rounded: u16 = @intFromFloat(@round(x0[ic]));
-    var vmin: usize = 0;
-    if (rounded > 2) {
-        vmin = rounded - 2;
-    }
-    var new_sol = try machine.allocator.alloc(u16, sol.len);
-    defer machine.allocator.free(new_sol);
-    @memcpy(new_sol, sol);
-    for (vmin..rounded + 3) |incr| {
-        for (machine.buttons[ic]) |b| {
-            const i: usize = @intCast(b);
-            new_sol[i] = sol[i] + @as(u16, @intCast(incr));
-            if (new_sol[i] > machine.requirements[i]) {
-                return;
+
+        std.debug.print("swap rows {} and {}\n", .{ h, imax });
+        std.mem.swap([]f32, &a[imax], &a[h]);
+        std.mem.swap(f32, &b[h], &b[imax]);
+        for (h + 1..m) |i| {
+            const fac = a[i][k] / a[h][k];
+            a[i][k] = 0;
+            b[i] -= fac * b[h];
+            for (k + 1..n) |j| {
+                a[i][j] -= fac * a[h][j];
             }
         }
-        try solve_part2(machine, x0, new_sol, ic + 1, nmove + @as(u16, @intCast(incr)), best);
+        h += 1;
+        k += 1;
     }
 }
+
+// pub fn solve_part2(machine: *const Machine, x0: []const f32, sol: []u16, ic: usize, nmove: u16, best: *u16) !void {
+//     if (ic == machine.buttons.len) {
+//         for (sol, 0..) |s, i| {
+//             if (s != machine.requirements[i]) {
+//                 return;
+//             }
+//         }
+//         if (nmove < best.*) {
+//             best.* = nmove;
+//         }
+//         return;
+//     }
+//     const rounded: u16 = @intFromFloat(@round(x0[ic]));
+//     var vmin: usize = 0;
+//     if (rounded > 2) {
+//         vmin = rounded - 2;
+//     }
+//     var new_sol = try machine.allocator.alloc(u16, sol.len);
+//     defer machine.allocator.free(new_sol);
+//     @memcpy(new_sol, sol);
+//     for (vmin..rounded + 3) |incr| {
+//         for (machine.buttons[ic]) |b| {
+//             const i: usize = @intCast(b);
+//             new_sol[i] = sol[i] + @as(u16, @intCast(incr));
+//             if (new_sol[i] > machine.requirements[i]) {
+//                 return;
+//             }
+//         }
+//         try solve_part2(machine, x0, new_sol, ic + 1, nmove + @as(u16, @intCast(incr)), best);
+//     }
+// }
 
 pub fn compare_buttons(_: void, a: []u8, b: []u8) bool {
     return a.len > b.len;
@@ -285,7 +318,7 @@ pub fn main() !void {
 
     const allocator = std.heap.c_allocator;
     var part1: u32 = 0;
-    var part2: u32 = 0;
+    // var part2: u32 = 0;
     var iline: usize = 0;
 
     while (try reader.interface.takeDelimiter('\n')) |line| {
@@ -306,17 +339,22 @@ pub fn main() !void {
         defer free_matrix(allocator, f32, a);
         const b = try machine.joltage_vector();
         defer allocator.free(b);
-        const x0 = try least_squares(allocator, a, b, 1e-3);
-        defer allocator.free(x0);
+        // const x0 = try least_squares(allocator, a, b, 1e-3);
+        // defer allocator.free(x0);
+        show_matrix(f32, a);
+        std.debug.print("{any}\n", .{b});
+        gaussian_elimination(a, b);
+        show_matrix(f32, a);
+        std.debug.print("{any}\n", .{b});
         // std.debug.print("{any}\n", .{x0});
 
-        var sol2: u16 = std.math.maxInt(u16);
-        const x = try allocator.alloc(u16, machine.requirements.len);
-        @memset(x, 0);
-        defer allocator.free(x);
-        try solve_part2(&machine, x0, x, 0, 0, &sol2);
-        part2 += sol2;
+        // var sol2: u16 = std.math.maxInt(u16);
+        // const x = try allocator.alloc(u16, machine.requirements.len);
+        // @memset(x, 0);
+        // defer allocator.free(x);
+        // try solve_part2(&machine, x0, x, 0, 0, &sol2);
+        // part2 += sol2;
     }
     std.debug.print("Part 1: {}\n", .{part1});
-    std.debug.print("Part 2: {}\n", .{part2});
+    // std.debug.print("Part 2: {}\n", .{part2});
 }
