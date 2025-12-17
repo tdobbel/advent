@@ -1,5 +1,7 @@
 const std = @import("std");
 
+const EPS = 5 * std.math.floatEps(f32);
+
 const Machine = struct {
     ndigit: u5,
     diagram: u32,
@@ -247,12 +249,11 @@ pub fn gaussian_elimination(a: [][]f32, b: []f32) void {
                 imax = i;
             }
         }
-        if (std.math.approxEqAbs(f32, a[imax][k], 0, 1e-4)) {
+        if (std.math.approxEqAbs(f32, a[imax][k], 0, EPS)) {
             k += 1;
             continue;
         }
 
-        std.debug.print("swap rows {} and {}\n", .{ h, imax });
         std.mem.swap([]f32, &a[imax], &a[h]);
         std.mem.swap(f32, &b[h], &b[imax]);
         for (h + 1..m) |i| {
@@ -341,11 +342,36 @@ pub fn main() !void {
         defer allocator.free(b);
         // const x0 = try least_squares(allocator, a, b, 1e-3);
         // defer allocator.free(x0);
-        show_matrix(f32, a);
-        std.debug.print("{any}\n", .{b});
         gaussian_elimination(a, b);
         show_matrix(f32, a);
         std.debug.print("{any}\n", .{b});
+
+        var i: usize = 0;
+        var j: usize = 0;
+
+        var isfree = try allocator.alloc(bool, a[0].len);
+        @memset(isfree, true);
+        defer allocator.free(isfree);
+        while (i < a.len and j < a[0].len) : (i += 1) {
+            while (j < a[0].len and std.math.approxEqAbs(f32, a[i][j], 0, EPS)) {
+                j += 1;
+            }
+            if (j < a[0].len) isfree[j] = false;
+        }
+        std.debug.print("{any}\n", .{isfree});
+        for (isfree, 0..) |flag, k| {
+            if (!flag) continue;
+            var ub = std.math.floatMax(f32);
+            for (0..a.len) |h| {
+                if (std.math.approxEqAbs(f32, a[h][k], 0.0, EPS)) {
+                    continue;
+                }
+                const bound = b[h] / a[h][k];
+                if (bound < ub) ub = bound;
+            }
+            std.debug.print("variable {} is free with upper bound: {}\n", .{ k, ub });
+        }
+
         // std.debug.print("{any}\n", .{x0});
 
         // var sol2: u16 = std.math.maxInt(u16);
