@@ -269,6 +269,45 @@ pub fn gaussian_elimination(a: [][]f32, b: []f32) void {
     }
 }
 
+pub fn get_upper_bound(a: []const []const f32, b: []const f32, k: usize) usize {
+    var ub = std.math.floatMax(f32);
+    for (a, 0..) |row, i| {
+        if (std.math.approxEqAbs(f32, row[k], 0, EPS)) {
+            continue;
+        }
+        const u = b[i] / row[k] ;
+        if (u < ub) {
+            ub = u;
+        }
+    }
+    if (ub < 0) return 0;
+    return @intFromFloat(ub);
+}
+
+pub fn solve_system(a: []const []const f32, b: []const f32, x: []f32, free_var: []const bool) bool {
+    var i: usize = 0;
+    for (free_var) |skip| {
+        if (!skip) i += 1;
+    }
+    var j: usize = a[0].len;
+    while (i > 0) : (i -= 1){
+        j -= 1;
+        while (free_var[j] and j > 0) {
+            j -= 1;
+        }
+        std.debug.print("row {} -> stop at column {}\n", .{i - 1, j});
+        var k: usize = a[0].len - 1;
+        x[j] = b[i - 1];
+        while (k > j) : (k -= 1) {
+            if (free_var[k]) continue;
+            x[j] -= x[k] * a[i - 1][k];
+        }
+        x[j] /= a[i - 1][j];
+        if (x[j] < 0) return false;
+    }
+    return true;
+}
+
 // pub fn solve_part2(machine: *const Machine, x0: []const f32, sol: []u16, ic: usize, nmove: u16, best: *u16) !void {
 //     if (ic == machine.buttons.len) {
 //         for (sol, 0..) |s, i| {
@@ -300,10 +339,6 @@ pub fn gaussian_elimination(a: [][]f32, b: []f32) void {
 //         try solve_part2(machine, x0, new_sol, ic + 1, nmove + @as(u16, @intCast(incr)), best);
 //     }
 // }
-
-pub fn compare_buttons(_: void, a: []u8, b: []u8) bool {
-    return a.len > b.len;
-}
 
 pub fn main() !void {
     if (std.os.argv.len != 2) {
@@ -350,26 +385,28 @@ pub fn main() !void {
         var j: usize = 0;
 
         var isfree = try allocator.alloc(bool, a[0].len);
-        @memset(isfree, true);
         defer allocator.free(isfree);
+        @memset(isfree, true);
+        var upperbounds = try allocator.alloc(usize, a[0].len);
+        defer allocator.free(upperbounds);
+        @memset(upperbounds, 0);
         while (i < a.len and j < a[0].len) : (i += 1) {
             while (j < a[0].len and std.math.approxEqAbs(f32, a[i][j], 0, EPS)) {
+                upperbounds[j] = get_upper_bound(a, b, j);
                 j += 1;
             }
             if (j < a[0].len) isfree[j] = false;
         }
         std.debug.print("{any}\n", .{isfree});
-        for (isfree, 0..) |flag, k| {
-            if (!flag) continue;
-            var ub = std.math.floatMax(f32);
-            for (0..a.len) |h| {
-                if (std.math.approxEqAbs(f32, a[h][k], 0.0, EPS)) {
-                    continue;
-                }
-                const bound = b[h] / a[h][k];
-                if (bound < ub) ub = bound;
-            }
-            std.debug.print("variable {} is free with upper bound: {}\n", .{ k, ub });
+        std.debug.print("{any}\n", .{upperbounds});
+        if (iline == 3) {
+            const x = try allocator.alloc(f32, a[0].len);
+            defer allocator.free(x);
+            @memset(x, 0);
+            x[3] = 1;
+            b[1] -= 1;
+            _ = solve_system(a, b, x, isfree);
+            std.debug.print("{any}\n", .{x});
         }
 
         // std.debug.print("{any}\n", .{x0});
