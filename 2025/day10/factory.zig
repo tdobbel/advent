@@ -2,46 +2,6 @@ const std = @import("std");
 
 const EPS = 5 * std.math.floatEps(f32);
 
-const Machine = struct {
-    ndigit: u5,
-    diagram: u32,
-    buttons: [][]u8,
-    requirements: []u16,
-    allocator: std.mem.Allocator,
-
-    pub fn free(self: *Machine) void {
-        for (self.buttons) |v| {
-            self.allocator.free(v);
-        }
-        self.allocator.free(self.buttons);
-        self.allocator.free(self.requirements);
-    }
-
-    pub fn constraint_matrix(self: *const Machine) ![][]f32 {
-        const m = self.requirements.len;
-        const n = self.buttons.len;
-        var a = try self.allocator.alloc([]f32, m);
-        for (0..m) |i| {
-            a[i] = try self.allocator.alloc(f32, n);
-        }
-        for (self.buttons, 0..) |button, j| {
-            for (button) |b| {
-                const i: usize = @intCast(b);
-                a[i][j] = 1.0;
-            }
-        }
-        return a;
-    }
-
-    pub fn joltage_vector(self: *const Machine) ![]f32 {
-        var b = try self.allocator.alloc(f32, self.requirements.len);
-        for (self.requirements, 0..) |v, i| {
-            b[i] = @as(f32, @floatFromInt(v));
-        }
-        return b;
-    }
-};
-
 pub fn parse_diagram(word: []const u8, ndigit: *u5) u32 {
     var res: u32 = 0;
     ndigit.* = 0;
@@ -85,28 +45,86 @@ pub fn parse_requirements(allocator: std.mem.Allocator, word: []const u8) ![]u16
     return try jolt.toOwnedSlice();
 }
 
-pub fn parse_line(allocator: std.mem.Allocator, line: []u8) !Machine {
-    var it = std.mem.tokenizeAny(u8, line, " ");
-    var diagram: u32 = undefined;
-    var jolt: []u16 = undefined;
-    var ndigit: u5 = 0;
-    var buttons = std.array_list.Managed([]u8).init(allocator);
-    while (it.next()) |part| {
-        switch (part[0]) {
-            '[' => {
-                diagram = parse_diagram(part[1..], &ndigit);
-            },
-            '(' => {
-                try buttons.append(try parse_button(allocator, part[1..]));
-            },
-            '{' => {
-                jolt = try parse_requirements(allocator, part[1..]);
-            },
-            else => unreachable,
+const Machine = struct {
+    ndigit: u5,
+    diagram: u32,
+    buttons: [][]u8,
+    requirements: []u16,
+    allocator: std.mem.Allocator,
+
+    pub fn from_line(allocator: std.mem.Allocator, line: []u8) !Machine {
+        var it = std.mem.tokenizeAny(u8, line, " ");
+        var diagram: u32 = undefined;
+        var jolt: []u16 = undefined;
+        var ndigit: u5 = 0;
+        var buttons = std.array_list.Managed([]u8).init(allocator);
+        while (it.next()) |part| {
+            switch (part[0]) {
+                '[' => {
+                    diagram = parse_diagram(part[1..], &ndigit);
+                },
+                '(' => {
+                    try buttons.append(try parse_button(allocator, part[1..]));
+                },
+                '{' => {
+                    jolt = try parse_requirements(allocator, part[1..]);
+                },
+                else => unreachable,
+            }
         }
+        return Machine{ .ndigit = ndigit, .diagram = diagram, .buttons = try buttons.toOwnedSlice(), .requirements = jolt, .allocator = allocator };
     }
-    return Machine{ .ndigit = ndigit, .diagram = diagram, .buttons = try buttons.toOwnedSlice(), .requirements = jolt, .allocator = allocator };
-}
+
+    pub fn free(self: *Machine) void {
+        for (self.buttons) |v| {
+            self.allocator.free(v);
+        }
+        self.allocator.free(self.buttons);
+        self.allocator.free(self.requirements);
+    }
+
+    pub fn constraint_matrix(self: *const Machine) ![][]f32 {
+        const m = self.requirements.len;
+        const n = self.buttons.len;
+        var a = try self.allocator.alloc([]f32, m);
+        for (0..m) |i| {
+            a[i] = try self.allocator.alloc(f32, n);
+        }
+        for (self.buttons, 0..) |button, j| {
+            for (button) |b| {
+                const i: usize = @intCast(b);
+                a[i][j] = 1.0;
+            }
+        }
+        return a;
+    }
+
+    pub fn joltage_vector(self: *const Machine) ![]f32 {
+        var b = try self.allocator.alloc(f32, self.requirements.len);
+        for (self.requirements, 0..) |v, i| {
+            b[i] = @as(f32, @floatFromInt(v));
+        }
+        return b;
+    }
+
+    pub fn check_solution(self: *Machine, x: []const f32, sol: *u32) !bool {
+        var jolt = try self.allocator.alloc(u16, self.requirements.len);
+        defer self.allocator.free(jolt);
+        @memset(jolt, 0);
+        for (self.buttons, 0..) |button, i| {
+            const ix: i32 = @intFromFloat(@round(x[i]));
+            if (ix < 0) return false;
+            sol.* += @intCast(ix);
+            for (button) |ib| {
+                jolt[@intCast(ib)] += @intCast(ix);
+            }
+        }
+        for (self.requirements, 0..) |target, i| {
+            if (jolt[i] != target) return false;
+        }
+        return true;
+    }
+};
 
 pub fn solve_part1(target: u32, buttons: []const u32, current: u32, cost: u8, best: *u8) void {
     if (current == target) {
@@ -269,76 +287,103 @@ pub fn gaussian_elimination(a: [][]f32, b: []f32) void {
     }
 }
 
-pub fn get_upper_bound(a: []const []const f32, b: []const f32, k: usize) usize {
-    var ub = std.math.floatMax(f32);
-    for (a, 0..) |row, i| {
-        if (std.math.approxEqAbs(f32, row[k], 0, EPS)) {
-            continue;
-        }
-        const u = b[i] / row[k] ;
-        if (u < ub) {
-            ub = u;
-        }
-    }
-    if (ub < 0) return 0;
-    return @intFromFloat(ub);
-}
+const System = struct {
+    allocator: std.mem.Allocator,
+    a: [][]f32,
+    b: []f32,
+    free_var: []bool,
+    upper_bounds: []usize,
 
-pub fn solve_system(a: []const []const f32, b: []const f32, x: []f32, free_var: []const bool) bool {
-    var i: usize = 0;
-    for (free_var) |skip| {
-        if (!skip) i += 1;
+    pub fn from_machine(machine: *const Machine) !System {
+        const allocator = machine.allocator;
+        const a = try machine.constraint_matrix();
+        const b = try machine.joltage_vector();
+        var upper = try allocator.alloc(usize, a[0].len);
+        for (machine.buttons, 0..) |button, ivar| {
+            var ub: usize = std.math.maxInt(usize);
+            for (button) |ib| {
+                const i: usize = @intCast(ib);
+                if (machine.requirements[i] < ub) {
+                    ub = machine.requirements[i];
+                }
+            }
+            upper[ivar] = ub;
+        }
+        gaussian_elimination(a, b);
+        var i: usize = 0;
+        var j: usize = 0;
+
+        var isfree = try allocator.alloc(bool, a[0].len);
+        @memset(isfree, true);
+        while (i < a.len and j < a[0].len) : (i += 1) {
+            while (j < a[0].len and std.math.approxEqAbs(f32, a[i][j], 0, EPS)) {
+                j += 1;
+            }
+            if (j < a[0].len) isfree[j] = false;
+        }
+        // show_matrix(f32, a);
+        // std.debug.print("b={any}\n", .{b});
+        // std.debug.print("free_var={any}\n", .{isfree});
+        // std.debug.print("upper_bound={any}\n", .{upper});
+        return System{ .allocator = allocator, .a = a, .b = b, .free_var = isfree, .upper_bounds = upper };
     }
-    var j: usize = a[0].len;
-    while (i > 0) : (i -= 1){
-        j -= 1;
-        while (free_var[j] and j > 0) {
+
+    pub fn solve(self: *const System, x: []f32) void {
+        var i: usize = 0;
+        for (self.free_var) |skip| {
+            if (!skip) i += 1;
+        }
+        var j: usize = self.a[0].len;
+        while (i > 0) : (i -= 1) {
             j -= 1;
+            while (self.free_var[j] and j > 0) {
+                j -= 1;
+            }
+            var k: usize = self.a[0].len - 1;
+            x[j] = self.b[i - 1];
+            while (k > j) : (k -= 1) {
+                if (self.free_var[k]) continue;
+                x[j] -= x[k] * self.a[i - 1][k];
+            }
+            x[j] /= self.a[i - 1][j];
         }
-        std.debug.print("row {} -> stop at column {}\n", .{i - 1, j});
-        var k: usize = a[0].len - 1;
-        x[j] = b[i - 1];
-        while (k > j) : (k -= 1) {
-            if (free_var[k]) continue;
-            x[j] -= x[k] * a[i - 1][k];
-        }
-        x[j] /= a[i - 1][j];
-        if (x[j] < 0) return false;
     }
-    return true;
-}
 
-// pub fn solve_part2(machine: *const Machine, x0: []const f32, sol: []u16, ic: usize, nmove: u16, best: *u16) !void {
-//     if (ic == machine.buttons.len) {
-//         for (sol, 0..) |s, i| {
-//             if (s != machine.requirements[i]) {
-//                 return;
-//             }
-//         }
-//         if (nmove < best.*) {
-//             best.* = nmove;
-//         }
-//         return;
-//     }
-//     const rounded: u16 = @intFromFloat(@round(x0[ic]));
-//     var vmin: usize = 0;
-//     if (rounded > 2) {
-//         vmin = rounded - 2;
-//     }
-//     var new_sol = try machine.allocator.alloc(u16, sol.len);
-//     defer machine.allocator.free(new_sol);
-//     @memcpy(new_sol, sol);
-//     for (vmin..rounded + 3) |incr| {
-//         for (machine.buttons[ic]) |b| {
-//             const i: usize = @intCast(b);
-//             new_sol[i] = sol[i] + @as(u16, @intCast(incr));
-//             if (new_sol[i] > machine.requirements[i]) {
-//                 return;
-//             }
-//         }
-//         try solve_part2(machine, x0, new_sol, ic + 1, nmove + @as(u16, @intCast(incr)), best);
-//     }
-// }
+    pub fn free(self: *const System) void {
+        free_matrix(self.allocator, f32, self.a);
+        self.allocator.free(self.b);
+        self.allocator.free(self.free_var);
+        self.allocator.free(self.upper_bounds);
+    }
+};
+
+pub fn solve_part2(machine: *Machine, sys: *System, col: usize, x: []f32, best: *u32) !void {
+    var ivar = col;
+    const nvar = sys.free_var.len;
+    while (ivar < nvar and !sys.free_var[ivar]) {
+        ivar += 1;
+    }
+    if (ivar == nvar) {
+        sys.solve(x);
+        var sol: u32 = 0;
+        const valid_sol = try machine.check_solution(x, &sol);
+        // std.debug.print("x={any} , valid={}\n", .{x, valid_sol});
+        if (valid_sol and sol < best.*) {
+            best.* = sol;
+        }
+        return;
+    }
+    const bold = try sys.allocator.alloc(f32, sys.b.len);
+    defer sys.allocator.free(bold);
+    @memcpy(bold, sys.b);
+    for (0..sys.upper_bounds[ivar] + 1) |value| {
+        x[ivar] = @floatFromInt(value);
+        for (0..sys.a.len) |i| {
+            sys.b[i] = bold[i] - sys.a[i][ivar] * x[ivar];
+        }
+        try solve_part2(machine, sys, ivar + 1, x, best);
+    }
+}
 
 pub fn main() !void {
     if (std.os.argv.len != 2) {
@@ -354,13 +399,10 @@ pub fn main() !void {
 
     const allocator = std.heap.c_allocator;
     var part1: u32 = 0;
-    // var part2: u32 = 0;
-    var iline: usize = 0;
+    var part2: u32 = 0;
 
     while (try reader.interface.takeDelimiter('\n')) |line| {
-        iline += 1;
-        std.debug.print("line {}\n", .{iline});
-        var machine = try parse_line(allocator, line);
+        var machine = try Machine.from_line(allocator, line);
         defer machine.free();
         var buttons: []u32 = try allocator.alloc(u32, machine.buttons.len);
         defer allocator.free(buttons);
@@ -371,53 +413,16 @@ pub fn main() !void {
         solve_part1(machine.diagram, buttons, 0, 0, &sol1);
         part1 += sol1;
 
-        const a = try machine.constraint_matrix();
-        defer free_matrix(allocator, f32, a);
-        const b = try machine.joltage_vector();
-        defer allocator.free(b);
-        // const x0 = try least_squares(allocator, a, b, 1e-3);
-        // defer allocator.free(x0);
-        gaussian_elimination(a, b);
-        show_matrix(f32, a);
-        std.debug.print("{any}\n", .{b});
+        var sys = try System.from_machine(&machine);
+        defer sys.free();
 
-        var i: usize = 0;
-        var j: usize = 0;
-
-        var isfree = try allocator.alloc(bool, a[0].len);
-        defer allocator.free(isfree);
-        @memset(isfree, true);
-        var upperbounds = try allocator.alloc(usize, a[0].len);
-        defer allocator.free(upperbounds);
-        @memset(upperbounds, 0);
-        while (i < a.len and j < a[0].len) : (i += 1) {
-            while (j < a[0].len and std.math.approxEqAbs(f32, a[i][j], 0, EPS)) {
-                upperbounds[j] = get_upper_bound(a, b, j);
-                j += 1;
-            }
-            if (j < a[0].len) isfree[j] = false;
-        }
-        std.debug.print("{any}\n", .{isfree});
-        std.debug.print("{any}\n", .{upperbounds});
-        if (iline == 3) {
-            const x = try allocator.alloc(f32, a[0].len);
-            defer allocator.free(x);
-            @memset(x, 0);
-            x[3] = 1;
-            b[1] -= 1;
-            _ = solve_system(a, b, x, isfree);
-            std.debug.print("{any}\n", .{x});
-        }
-
-        // std.debug.print("{any}\n", .{x0});
-
-        // var sol2: u16 = std.math.maxInt(u16);
-        // const x = try allocator.alloc(u16, machine.requirements.len);
-        // @memset(x, 0);
-        // defer allocator.free(x);
-        // try solve_part2(&machine, x0, x, 0, 0, &sol2);
-        // part2 += sol2;
+        var sol2: u32 = std.math.maxInt(u32);
+        const x = try allocator.alloc(f32, sys.a[0].len);
+        defer allocator.free(x);
+        try solve_part2(&machine, &sys, 0, x, &sol2);
+        // std.debug.print("-> sol2={}\n", .{sol2});
+        part2 += sol2;
     }
     std.debug.print("Part 1: {}\n", .{part1});
-    // std.debug.print("Part 2: {}\n", .{part2});
+    std.debug.print("Part 2: {}\n", .{part2});
 }
