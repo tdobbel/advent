@@ -102,9 +102,8 @@ int main() {
   struct Node *node1 = ll->head;
   int new_ref[26];
   while (node1 != ll->end) {
-    memcpy(new_ref, refcount, 26 * sizeof(int));
     for (int i = 0; i < 26; ++i) {
-      new_ref[i] -= node1->counter[i];
+      new_ref[i] = refcount[i] - node1->counter[i];
     }
     struct Node *node2 = node1->next;
     while (node2) {
