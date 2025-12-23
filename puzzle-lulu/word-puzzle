@@ -1,0 +1,106 @@
+#!/usr/bin/env bash
+
+declare -a words
+declare -a counters
+declare -A carray
+
+cstart=$(printf "%d" "'a'")
+cend=$(printf "%d" "'z'")
+
+for ((i = cstart; i <= cend; ++i)); do
+    c=$(printf "\x$(printf "%x" "$i")")
+    carray[$c]=0
+done
+
+puzzle="cryestmotolsns"
+refcount=""
+cword=""
+possible=0
+matching=0
+
+count-letter() {
+    local word="$1"
+    local lower="${word,,}"
+    local letter
+    for letter in "${!carray[@]}"; do
+        carray[$letter]=0
+    done
+    local nletter="${#word}"
+    for ((i = 0; i < nletter; ++i)); do
+        letter="${lower:i:1}"
+        [[ "${carray[$letter]:+1}" ]] || continue
+        carray[$letter]=$((carray[$letter] + 1))
+    done
+}
+#
+check-possible() {
+    local nref ntest
+    local i=0
+    for key in "${!carray[@]}"; do
+        nref="${refcount:i:1}"
+        ntest="${carray[$key]}"
+        if ((ntest > nref)); then
+            possible=0
+            return
+        fi
+        ((i++))
+    done
+    possible=1
+}
+
+check-matching() {
+    local word="$1"
+    local nref ntest
+    local i=0
+    for key in "${!carray[@]}"; do
+        nref="${carray[$key]}"
+        ntest="${word:i:1}"
+        if ((nref != ntest)); then
+            matching=0
+            return
+        fi
+        ((i++))
+    done
+    matching=1
+}
+
+count-letter "$puzzle"
+for k in "${!carray[@]}"; do
+    refcount+="${carray[$k]}"
+done
+check-possible
+
+echo "Looking for potential words in dictionary..."
+while read -r word; do
+    count-letter "$word"
+    check-possible
+    ((possible)) || continue
+    words+=("$word")
+    cword=""
+    for key in "${!carray[@]}"; do
+        cword+="${carray[$key]}"
+    done
+    counters+=("$cword")
+done <"/usr/share/dict/words"
+
+nword="${#words[@]}"
+echo "-> Found $nword possible words"
+
+for ((i = 0; i < nword - 1; ++i)); do
+    word1="${words[i]}"
+    cntr1="${counters[i]}"
+    k=0
+    for key in "${!carray[@]}"; do
+        n1="${cntr1:k:1}"
+        nref="${refcount:k:1}"
+        carray[$key]=$((nref - n1))
+        ((k++))
+    done
+    for ((j = i + 1; j < nword; j++)); do
+        word2="${words[j]}"
+        cntr2="${counters[j]}"
+        check-matching "$cntr2"
+        ((matching)) || continue
+        echo "Possible match: $word1 $word2"
+    done
+done
