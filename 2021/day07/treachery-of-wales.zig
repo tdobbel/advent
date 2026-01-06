@@ -1,6 +1,6 @@
 const std = @import("std");
 
-pub fn compute_cost(positions: []const u32, x: u32) u32 {
+pub fn cost1(positions: []const u32, x: u32) u32 {
     var cost: u32 = 0;
     for (positions) |pos| {
         if (x >= pos) {
@@ -12,36 +12,38 @@ pub fn compute_cost(positions: []const u32, x: u32) u32 {
     return cost;
 }
 
-pub fn find_minimum(positions: []const u32) u32 {
+pub fn slope1(positions: []const u32, x: u32) i32 {
+    var slope: i32 = 0;
+    for (positions) |pos| {
+        if (pos > x) {
+            slope -= 1;
+        } else if (pos < x) {
+            slope += 1;
+        }
+    }
+    return slope;
+}
+
+pub fn find_minimum(positions: []const u32, f: fn ([]const u32, u32) u32, df: fn ([]const u32, u32) i32) u32 {
     var a: u32 = std.math.maxInt(u32);
     var b: u32 = 0;
     for (positions) |pos| {
-        if (pos < a) a = pos; 
+        if (pos < a) a = pos;
         if (pos > b) b = pos;
     }
     var x: u32 = undefined;
-    var slope: i32 = undefined;
     while (b - a > 1) {
         x = (b + a) / 2;
-        slope = 0;
-        for (positions) |pos| {
-            const ipos: i32 = @intCast(pos);
-            if (ipos > x) {
-                slope -= 1;
-            } else if (ipos < x) {
-                slope += 1;
-            }
-        }
-        if (slope == 0) return compute_cost(positions, x);
+        const slope = df(positions, x);
+        if (slope == 0) return f(positions, x);
         if (slope < 0) {
             a = x;
         } else if (slope > 0) {
             b = x;
         }
-
     }
-    const cost_a = compute_cost(positions, a);
-    const cost_b = compute_cost(positions, b);
+    const cost_a = f(positions, a);
+    const cost_b = f(positions, b);
     if (cost_a < cost_b) {
         return cost_a;
     }
@@ -71,6 +73,6 @@ pub fn main() !void {
         }
     }
 
-    const part1 = find_minimum(positions.items);
+    const part1 = find_minimum(positions.items, cost1, slope1);
     std.debug.print("Part 1: {}\n", .{part1});
 }
