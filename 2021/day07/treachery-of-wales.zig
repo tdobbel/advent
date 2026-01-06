@@ -24,6 +24,37 @@ pub fn slope1(positions: []const u32, x: u32) i32 {
     return slope;
 }
 
+pub fn fuel2(dist: u32) u32 {
+    var res: u32 = 0;
+    for (0..dist + 1) |d| {
+        res += @intCast(d);
+    }
+    return res;
+}
+
+pub fn cost2(positions: []const u32, x: u32) u32 {
+    var cost: u32 = 0;
+    for (positions) |pos| {
+        if (x >= pos) {
+            cost += fuel2(x - pos);
+        } else {
+            cost += fuel2(pos - x);
+        }
+    }
+    return cost;
+}
+
+pub fn slope2(positions: []const u32, x: u32) i32 {
+    if (x == 0) {
+        const c0: i32 = @intCast(cost2(positions, 0));
+        const c1: i32 = @intCast(cost2(positions, 1));
+        return c1 - c0;
+    }
+    const c0: i32 = @intCast(cost2(positions, x - 1));
+    const c1: i32 = @intCast(cost2(positions, x + 1));
+    return @divTrunc(c1 - c0, 2);
+}
+
 pub fn find_minimum(positions: []const u32, f: fn ([]const u32, u32) u32, df: fn ([]const u32, u32) i32) u32 {
     var a: u32 = std.math.maxInt(u32);
     var b: u32 = 0;
@@ -34,6 +65,7 @@ pub fn find_minimum(positions: []const u32, f: fn ([]const u32, u32) u32, df: fn
     var x: u32 = undefined;
     while (b - a > 1) {
         x = (b + a) / 2;
+        // std.debug.print("a={}, b={}, x={}\n", .{a, b, x});
         const slope = df(positions, x);
         if (slope == 0) return f(positions, x);
         if (slope < 0) {
@@ -75,4 +107,6 @@ pub fn main() !void {
 
     const part1 = find_minimum(positions.items, cost1, slope1);
     std.debug.print("Part 1: {}\n", .{part1});
+    const part2 = find_minimum(positions.items, cost2, slope2);
+    std.debug.print("Part 2: {}\n", .{part2});
 }
