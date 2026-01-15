@@ -103,10 +103,10 @@ int main(int argc, char *argv[]) {
   xs = realloc(xs, size * sizeof(i32));
 
   u32 part1 = find_minimum(xs, size, cost1, slope1);
-  printf("Part 1: %d\n", part1);
+  printf("Part 1: %u\n", part1);
 
   u32 part2 = find_minimum(xs, size, cost2, slope2);
-  printf("Part 2: %d\n", part2);
+  printf("Part 2: %u\n", part2);
 
 
   free(xs);
