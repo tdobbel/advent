@@ -6,6 +6,12 @@
 typedef uint32_t u32;
 typedef size_t usize;
 
+#ifdef SMALL
+#define NLOOP 10
+#else
+#define NLOOP 1000
+#endif
+
 #define BUFSIZE 64
 #define MAX(a, b) ((a) > (b) ? (a) : (b))
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
@@ -176,6 +182,16 @@ int compare_pairs(const void *a, const void *b) {
   return 0;
 }
 
+int compare_lists(const void *a, const void *b) {
+  LinkedList listA = *(LinkedList *)a;
+  LinkedList listB = *(LinkedList *)b;
+  if (listA.length < listB.length)
+    return 1;
+  if (listA.length > listB.length)
+    return -1;
+  return 0;
+}
+
 int main(int argc, char *argv[]) {
   if (argc < 2) {
     fprintf(stderr, "Missing input file\n");
@@ -215,24 +231,22 @@ int main(int argc, char *argv[]) {
   u32 max_dist = compute_distance(&pmin, &pmax);
 
   Vector *pairs = vector_create(512, sizeof(Pair));
-  for (usize i = 0; i < points->size - 1; i++) {
-    compute_pairwise_distance(points, pairs, max_dist, i);
+  for (usize i = 0; i < points->length - 1; i++) {
+    compute_pairwise_distance(points, pairs, 0.5 * max_dist, i);
   }
   qsort(pairs->data, pairs->length, sizeof(Pair), compare_pairs);
 
   Circuits *circuits = circuits_create(points->length);
   usize ipair = 0;
-  for (usize iloop = 0; iloop < 10; iloop++) {
+  for (usize iloop = 0; iloop < NLOOP; iloop++) {
     Pair *pair = (Pair *)vector_get(pairs, ipair++);
     Point *pa = (Point *)vector_get(points, pair->i);
     Point *pb = (Point *)vector_get(points, pair->j);
-    printf("Connection (%u, %u, %u) with (%u, %u, %u)\n", pa->x, pa->y, pa->z,
-           pb->x, pb->y, pb->z);
     circuits_connect(circuits, pair);
-    for (usize ic = 0; ic < circuits->size; ++ic) {
-      printf("Circuit %2lu : %lu\n", ic, circuits->parts[ic].length);
-    }
   }
+  qsort(circuits->parts, circuits->size, sizeof(LinkedList), compare_lists);
+  usize part1 = circuits->parts[0].length * circuits->parts[1].length * circuits->parts[2].length;
+  printf("Part 1: %lu\n", part1);
 
   vector_free(points);
   vector_free(pairs);
