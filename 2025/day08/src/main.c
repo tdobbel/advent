@@ -247,8 +247,19 @@ int main(int argc, char *argv[]) {
     circuits_connect(circuits, pair);
   }
   qsort(circuits->parts, circuits->size, sizeof(LinkedList), compare_lists);
-  usize part1 = circuits->parts[0].length * circuits->parts[1].length * circuits->parts[2].length;
+  usize part1 = circuits->parts[0].length * circuits->parts[1].length *
+                circuits->parts[2].length;
   printf("Part 1: %lu\n", part1);
+
+  u64 part2;
+  while (circuits->size > 1) {
+    Pair *pair = (Pair *)vector_get(pairs, ipair++);
+    Point *pa = (Point *)vector_get(points, pair->i);
+    Point *pb = (Point *)vector_get(points, pair->j);
+    circuits_connect(circuits, pair);
+    part2 = (u64)pa->x * (u64)pb->x;
+  }
+  printf("Part 2: %lu\n", part2);
 
   vector_free(points);
   vector_free(pairs);
