@@ -4,6 +4,7 @@
 #include <string.h>
 
 typedef uint32_t u32;
+typedef uint64_t u64;
 typedef size_t usize;
 
 #ifdef SMALL
@@ -15,6 +16,7 @@ typedef size_t usize;
 #define BUFSIZE 64
 #define MAX(a, b) ((a) > (b) ? (a) : (b))
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
+#define ABS_DIFF(a, b) (MAX((a), (b)) - MIN((a), (b)))
 
 typedef struct {
   usize capacity, length, size;
@@ -55,7 +57,7 @@ typedef struct {
 
 typedef struct {
   usize i, j;
-  u32 distance;
+  u64 distance;
 } Pair;
 
 struct Node {
@@ -150,19 +152,19 @@ void parse_line(const char *line, u32 *xyz) {
   }
 }
 
-u32 compute_distance(const Point *p0, const Point *p1) {
-  u32 dx = p1->x - p0->x;
-  u32 dy = p1->y - p0->y;
-  u32 dz = p1->z - p0->z;
+u64 compute_distance(const Point *p0, const Point *p1) {
+  u64 dx = (u64)ABS_DIFF(p1->x, p0->x);
+  u64 dy = (u64)ABS_DIFF(p1->y, p0->y);
+  u64 dz = (u64)ABS_DIFF(p1->z, p0->z);
   return dx * dx + dy * dy + dz * dz;
 }
 
-void compute_pairwise_distance(Vector *points, Vector *pairs, u32 max_dist,
+void compute_pairwise_distance(Vector *points, Vector *pairs, u64 max_dist,
                                usize iref) {
   const Point *p0 = vector_get(points, iref);
   for (usize i = iref + 1; i < points->length; ++i) {
     const Point *p1 = vector_get(points, i);
-    u32 dist = compute_distance(p0, p1);
+    u64 dist = compute_distance(p0, p1);
     if (dist > max_dist)
       continue;
     Pair *pair = (Pair *)vector_append(pairs);
@@ -228,7 +230,7 @@ int main(int argc, char *argv[]) {
 
   Point pmin = {.x = xmin, .y = ymin, .z = zmin};
   Point pmax = {.x = xmax, .y = ymax, .z = zmax};
-  u32 max_dist = compute_distance(&pmin, &pmax);
+  u64 max_dist = compute_distance(&pmin, &pmax);
 
   Vector *pairs = vector_create(512, sizeof(Pair));
   for (usize i = 0; i < points->length - 1; i++) {
