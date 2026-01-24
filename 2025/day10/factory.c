@@ -31,6 +31,8 @@ void vector_empty(Vector *self) { self->length = 0; }
 void machine_parse(Machine *machine, char *line);
 void machine_display(Machine *machine);
 
+void solve_part1(Machine *machine, u32 index, u32 word, u8 cost, u8 *min_cost);
+
 int main(int argc, char *argv[]) {
   if (argc < 2) {
     fprintf(stderr, "Missing input file\n");
@@ -46,10 +48,17 @@ int main(int argc, char *argv[]) {
   char line[BUFSIZE];
   Machine machine = {.buttons = vector_create(16, sizeof(u32)),
                      .requirements = vector_create(16, sizeof(u16))};
+  u32 part1 = 0;
   while (fgets(line, BUFSIZE, fp)) {
     machine_parse(&machine, line);
-    machine_display(&machine);
+    u8 min_cost = UINT8_MAX;
+    printf("Diagram: %u\n", machine.diagram);
+    solve_part1(&machine, 0, 0, 0, &min_cost);
+    printf("Min cost: %hu\n", min_cost);
+    part1 += min_cost;
+    // machine_display(&machine);
   }
+  printf("Part 1: %u\n", part1);
   vector_free(machine.buttons);
   vector_free(machine.requirements);
   fclose(fp);
@@ -90,12 +99,10 @@ void machine_parse(Machine *machine, char *line) {
   u32 diagram = 0;
   u32 n_digit = 0;
   for (u32 i = 1; i < n; ++i) {
-    if (line[i] == '#') {
-      n_digit++;
-      diagram <<= 1;
-      if (line[i] == '#')
-        diagram += 1;
-    }
+    n_digit++;
+    diagram <<= 1;
+    if (line[i] == '#')
+      diagram += 1;
   }
   machine->n_digit = n_digit;
   machine->diagram = diagram;
@@ -131,7 +138,7 @@ void machine_parse(Machine *machine, char *line) {
 void machine_display(Machine *self) {
   printf("Buttons:");
   for (u32 i = 0; i < self->buttons->length; ++i) {
-    u32 button = *(u32*)vector_get(self->buttons, i);
+    u32 button = *(u32 *)vector_get(self->buttons, i);
     printf("(");
     for (u32 p = 0; p < self->n_digit; ++p) {
       u32 test = 1 << (self->n_digit - p - 1);
@@ -142,8 +149,24 @@ void machine_display(Machine *self) {
   }
   printf("\nRequirements: {");
   for (u32 i = 0; i < self->requirements->length; ++i) {
-    u16 num = *(u16*)vector_get(self->requirements, i);
+    u16 num = *(u16 *)vector_get(self->requirements, i);
     printf("%hu, ", num);
   }
   printf("}\n");
+}
+
+void solve_part1(Machine *machine, u32 index, u32 word, u8 cost, u8 *min_cost) {
+  if (cost > *min_cost || index >= machine->buttons->length)
+    return;
+  if (word == machine->diagram) {
+    if (cost < *min_cost) {
+      *min_cost = cost;
+    }
+    return;
+  }
+  u32 button = *(u32 *)vector_get(machine->buttons, index);
+  solve_part1(machine, index + 1, word, cost,
+              min_cost); // button is not pressed
+  solve_part1(machine, index + 1, word ^ button, cost + 1,
+              min_cost); // button is pressed;
 }
