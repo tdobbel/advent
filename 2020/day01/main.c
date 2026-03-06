@@ -25,11 +25,13 @@ void vector_push(vector_t *vec, u64 num) {
 }
 
 b32 solve_sum(vector_t *vec, u32 pos, u64 *nums, u32 size, u32 iNum) {
+  u64 sum = 0;
+  for (u64 i = 0; i < iNum; ++i) {
+    sum += nums[i];
+  }
+  if (sum > 2020)
+    return false;
   if (iNum == size) {
-    u64 sum = 0;
-    for (u64 i = 0; i < size; ++i) {
-      sum += nums[i];
-    }
     return sum == 2020;
   }
   u64 imax = vec->size - size + iNum + 1;
@@ -66,6 +68,7 @@ int main(int argc, char *argv[]) {
   b32 solved = solve_sum(&vec, 0, nums, 2, 0);
   if (!solved) {
     fprintf(stderr, "Could not solve part1\n");
+    return EXIT_FAILURE;
   }
   printf("Part 1: %lu\n", nums[0] * nums[1]);
   solved = solve_sum(&vec, 0, nums, 3, 0);
