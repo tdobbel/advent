@@ -43,17 +43,19 @@ instruct_t parse_instruction(char *line) {
   return (instruct_t){.command = cmd, .arg = arg};
 }
 
-i32 run_program(vector *program) {
-  b8 *touched = (b8 *)malloc(program->size);
+b8 run_program(vector *program, b8 *touched, i32 *acc) {
   memset(touched, false, program->size);
   instruct_t *prog = (instruct_t *)program->data;
-  i32 acc = 0;
+  *acc = 0;
   i32 i = 0;
-  while (!touched[i]) {
+  while ((u64)i < program->size) {
+    if (touched[i]) {
+      return false;
+    }
     touched[i] = true;
     switch (prog[i].command) {
     case Acc:
-      acc += prog[i].arg;
+      *acc += prog[i].arg;
       i++;
       break;
     case Jmp:
@@ -64,8 +66,30 @@ i32 run_program(vector *program) {
       break;
     }
   }
-  free(touched);
-  return acc;
+  return true;
+}
+
+i32 solve_part2(vector *program, b8 *touched) {
+  i32 acc;
+  instruct_t *prog = (instruct_t *)program->data;
+  for (u64 i = 0; i < program->size; ++i) {
+    if (prog[i].command == Acc)
+      continue;
+    if (prog[i].command == Jmp) {
+      prog[i].command = Nop;
+    } else {
+      prog[i].command = Jmp;
+    }
+    if (run_program(program, touched, &acc)) {
+      return acc;
+    }
+    if (prog[i].command == Jmp) {
+      prog[i].command = Nop;
+    } else {
+      prog[i].command = Jmp;
+    }
+  }
+  return -1;
 }
 
 int main(int argc, char *argv[]) {
@@ -89,9 +113,16 @@ int main(int argc, char *argv[]) {
   }
   fclose(fp);
 
-  i32 part1 = run_program(program);
+  b8 *touched = (b8 *)malloc(program->size);
+
+  i32 part1;
+  run_program(program, touched, &part1);
   printf("Part 1: %d\n", part1);
 
+  i32 part2 = solve_part2(program, touched);
+  printf("Part 2: %d\n", part2);
+
+  free(touched);
   vector_free(program);
 
   return EXIT_SUCCESS;
