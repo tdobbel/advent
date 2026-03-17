@@ -6,7 +6,7 @@ use std::io::{BufRead, BufReader};
 
 #[derive(Default)]
 struct Bag {
-    parents: Vec<(usize, usize)>,
+    parents: Vec<usize>,
     children: Vec<(usize, usize)>,
 }
 
@@ -30,7 +30,7 @@ impl BagRegister {
     pub fn add_bags(&mut self, parent: &str, qty: usize, child: &str) {
         let ip = self.get_bag_index(parent);
         let ic = self.get_bag_index(child);
-        self.bags[ic].parents.push((ip, qty));
+        self.bags[ic].parents.push(ip);
         self.bags[ip].children.push((ic, qty));
     }
 
@@ -40,9 +40,9 @@ impl BagRegister {
 }
 
 pub fn solve_part1(reg: &BagRegister, index: usize, found: &mut HashSet<usize>) {
-    for (parent_index, _qty) in reg.bags[index].parents.iter() {
-        found.insert(*parent_index);
-        solve_part1(reg, *parent_index, found);
+    for &parent_index in reg.bags[index].parents.iter() {
+        found.insert(parent_index);
+        solve_part1(reg, parent_index, found);
     }
 }
 
