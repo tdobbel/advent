@@ -1,20 +1,18 @@
 const std = @import("std");
 
-pub fn count_paths(joltages: []u32, icurr: usize, cache: *std.hash_map.AutoHashMap(usize, u64)) !u64 {
-    if (cache.get(icurr)) |count| {
-        return count;
+pub fn count_paths(allocator: std.mem.Allocator, joltages: []u32) !u64 {
+    var ii: i32 = @intCast(joltages.len - 2);
+    var totals = try allocator.alloc(u64, joltages.len);
+    totals[joltages.len - 1] = 1;
+    while (ii >= 0) : (ii -= 1) {
+        const i: usize = @intCast(ii);
+        var j: usize = i + 1;
+        totals[i] = 0;
+        while (j < joltages.len and joltages[j] - joltages[i] <= 3) : (j += 1) {
+            totals[i] += totals[j];
+        }
     }
-    if (icurr == joltages.len - 1) {
-        try cache.put(icurr, 1);
-        return 1;
-    }
-    var i: usize = icurr + 1;
-    var total: u64 = 0;
-    while (i < joltages.len and joltages[i] - joltages[icurr] <= 3) : (i += 1) {
-        total += try count_paths(joltages, i, cache);
-    }
-    try cache.put(icurr, total);
-    return total;
+    return totals[0];
 }
 
 pub fn main() !void {
@@ -56,7 +54,6 @@ pub fn main() !void {
     std.debug.print("d1={}, d3={}\n", .{ d1, d3 });
     std.debug.print("Part 1: {}\n", .{d1 * d3});
 
-    var cache = std.hash_map.AutoHashMap(usize, u64).init(allocator);
-    const part2 = try count_paths(joltages, 0, &cache);
+    const part2 = try count_paths(allocator, joltages);
     std.debug.print("Part 2: {}\n", .{part2});
 }
