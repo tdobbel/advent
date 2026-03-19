@@ -3,6 +3,7 @@
 
 #include <assert.h>
 #include <stdint.h>
+#include <string.h>
 #include <sys/mman.h>
 #include <unistd.h>
 
@@ -21,6 +22,8 @@ typedef i32 b32;
 #define ALIGN_UP_POW2(n, p) (((u64)(n) + ((u64)(p) - 1)) & (~((u64)(p) - 1)))
 #define ARENA_BASE_POS (sizeof(mem_arena))
 #define ARENA_ALIGN (sizeof(void *))
+
+#define MAX_VECTOR_GROW 10
 
 typedef struct {
   u64 size;
@@ -47,6 +50,27 @@ void arena_tmp_end(mem_arena_tmp arena_tmp);
 
 #define PUSH_STRUCT(arena, T) (T *)arena_push((arena), sizeof(T))
 #define PUSH_ARRAY(arena, T, n) (T *)arena_push((arena), (n) * sizeof(T))
+
+typedef struct {
+  mem_arena *arena;
+  u8 n_blocks;
+  u64 size, capacity, elem_size;
+  u64 istart[MAX_VECTOR_GROW + 1];
+  void *data[MAX_VECTOR_GROW];
+} arena_vector;
+
+arena_vector *vector_create(mem_arena *arena, u64 initial_capacity,
+                            u64 elem_size);
+void *vector_get(arena_vector *vec, u64 index);
+void *vector_append_get(arena_vector *vec);
+void *vector_flatten(arena_vector *vec);
+void vector_grow(arena_vector *vec);
+
+#define AVEC_CREATE(arena, T, cap) vector_create((arena), (cap), sizeof(T))
+#define AVEC_GET_REF(vec, T, i) (T *)vector_get((arena), (i))
+#define AVEC_GET(vec, T, i) *(T *)vector_get((vec), (i))
+#define AVEC_PUSH(vec, T, x) (*(T *)vector_append_get((vec)) = (x))
+#define AVEC_FLATTEN(vec, T) (T *)vector_flatten((vec))
 
 #endif
 
@@ -104,6 +128,59 @@ mem_arena_tmp arena_tmp_create(mem_arena *arena) {
 
 void arena_tmp_end(mem_arena_tmp arena_tmp) {
   arena_pop(arena_tmp.arena, arena_tmp.start_pos);
+}
+
+arena_vector *vector_create(mem_arena *arena, u64 initial_capacity,
+                            u64 elem_size) {
+  arena_vector *vec = PUSH_STRUCT(arena, arena_vector);
+  vec->size = 0;
+  vec->n_blocks = 1;
+  vec->arena = arena;
+  vec->capacity = initial_capacity;
+  vec->elem_size = elem_size;
+  vec->istart[0] = 0;
+  vec->istart[1] = initial_capacity;
+  vec->data[0] = arena_push(arena, vec->capacity * elem_size);
+  return vec;
+}
+
+void *vector_get(arena_vector *vec, u64 index) {
+  assert(index < vec->size);
+  u32 iblk = 0;
+  while (iblk < vec->n_blocks) {
+    if (index < vec->istart[iblk + 1])
+      break;
+    iblk++;
+  }
+  u64 index2 = index - vec->istart[iblk];
+  return (u8 *)vec->data[iblk] + index2 * vec->elem_size;
+}
+
+void vector_grow(arena_vector *vec) {
+  if (vec->size < vec->capacity)
+    return;
+  assert(vec->n_blocks < MAX_VECTOR_GROW);
+  u64 extra_capacity = vec->capacity / 2;
+  vec->data[vec->n_blocks++] =
+      arena_push(vec->arena, extra_capacity * vec->elem_size);
+  vec->capacity += extra_capacity;
+  vec->istart[vec->n_blocks] = vec->capacity;
+}
+
+void *vector_append_get(arena_vector *vec) {
+  vector_grow(vec);
+  return vector_get(vec, vec->size++);
+}
+
+void *vector_flatten(arena_vector *vec) {
+  u8 *flat = (u8 *)arena_push(vec->arena, vec->size * vec->elem_size);
+  for (u32 iblk = 0; iblk < vec->n_blocks; ++iblk) {
+    u64 block_size = MIN(vec->istart[iblk + 1] - vec->istart[iblk],
+                         vec->size - vec->istart[iblk]);
+    memcpy(flat + vec->istart[iblk] * vec->elem_size, vec->data[iblk],
+           block_size * vec->elem_size);
+  }
+  return flat;
 }
 
 #endif
