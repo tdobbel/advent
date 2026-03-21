@@ -1,5 +1,7 @@
+#ifndef _HASHMAP_H_
+#define _HASHMAP_H_
+
 #include <stdint.h>
-#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/types.h>
@@ -36,6 +38,8 @@ typedef struct {
 } hash_map;
 
 b8 eql(const void *a, const void *b, u32 size);
+void find_key(struct hm_node *node, const void *target, u32 ctx,
+              b8 (*cmp_fun)(const void *, const void *, u32));
 
 hash_map *hm_init(u32 capacity, u32 key_size, u32 value_size);
 kv_entry hm_get_entry(hash_map *hm, const void *key);
@@ -43,15 +47,6 @@ kv_entry hm_get_or_put(hash_map *hm, const void *key);
 b8 hm_get(hash_map *hm, const void *key, void *value_ptr);
 void hm_put(hash_map *hm, const void *key, const void *value);
 void hm_deinit(hash_map *hm);
-
-typedef struct {
-  hash_map *hmap;
-  u32 index, bucket;
-  struct hm_node *entry;
-} kv_iterator;
-
-kv_iterator hm_iterator(hash_map *hm);
-b8 get_next(kv_iterator *kv_iter);
 
 #define HM_CREATE(K, V) hm_init(DEFAULT_CAPACITY, sizeof(K), sizeof(V));
 #define HM_PUT(hm, K, k, V, v)                                                 \
@@ -61,18 +56,43 @@ b8 get_next(kv_iterator *kv_iter);
     hm_put((hm), &key, &value);                                                \
   }
 
-int main(void) {
-  hash_map *hm = HM_CREATE(u64, u32);
-  u64 keys[4] = {3, 42, 69, 1995};
-  for (u32 i = 0; i < 4; ++i) {
-    hm_put(hm, keys + i, &i);
-  }
-  kv_iterator kvi = hm_iterator(hm);
-  while (get_next(&kvi)) {
-    printf("%lu => %u\n", *(u64 *)kvi.entry->key, *(u32 *)kvi.entry->value);
-  }
-  hm_deinit(hm);
-}
+typedef struct {
+  hash_map *hmap;
+  u32 index, bucket;
+  void *key_ptr;
+  void *value_ptr;
+  struct hm_node *entry;
+} kv_iterator;
+
+kv_iterator hm_iterator(hash_map *hm);
+b8 get_next(kv_iterator *kv_iter);
+
+typedef struct {
+  u8 *str;
+  u64 size;
+} string8;
+
+string8 clone_to_string8(const char *s);
+
+#define STR8_LIT(s) ((string8){.str = (u8 *)(s), .size = strlen((s))})
+#define STR8_FMT "%.*s"
+#define STR8_UNWRAP(s) (int)(s).size, (char *)(s).str
+
+typedef struct {
+  hash_map *hm;
+} str_hash_map;
+
+b8 streql(const void *a, const void *b, u32 size);
+str_hash_map *shm_init(u32 capacity, u32 value_size);
+kv_entry shm_get_entry(str_hash_map *shm, const char *key);
+kv_entry shm_get_or_put(str_hash_map *shm, const char *key);
+b8 shm_get(str_hash_map *shm, const char *key, void *value_ptr);
+void shm_put(str_hash_map *shm, const char *key, void *value);
+void shm_deinit(str_hash_map *shm);
+
+#define SHM_CREATE(V) shm_init(DEFAULT_CAPACITY, sizeof(V));
+
+#ifdef HASHMAP_IMPLENTATION
 
 static inline u32 murmur_32_scramble(u32 k) {
   k *= 0xcc9e2d51;
@@ -136,31 +156,34 @@ b8 eql(const void *a, const void *b, u32 size) {
   return 1;
 }
 
+void find_key(struct hm_node *node, const void *target, u32 ctx,
+              b8 (*cmp_fun)(const void *, const void *, u32)) {
+  while (node) {
+    if (cmp_fun(node->key, target, ctx)) {
+      return;
+    }
+    node = node->next;
+  }
+}
+
 kv_entry hm_get_entry(hash_map *hm, const void *key) {
   u32 hash = murmur3_32((u8 *)key, hm->key_size, SEED);
   u32 ibkt = hash % hm->capacity;
   struct hm_node *node = hm->buckets[ibkt];
-  while (node != NULL) {
-    if (eql(key, node->key, hm->key_size)) {
-      return (kv_entry){
-          .found_existing = 1, .key_ptr = node->key, .value_ptr = node->value};
-    }
-    node = node->next;
+  find_key(node, key, hm->key_size, eql);
+  if (node) {
+    return (kv_entry){
+        .found_existing = 1, .key_ptr = node->key, .value_ptr = node->value};
   }
   return (kv_entry){.found_existing = 0, .key_ptr = NULL, .value_ptr = NULL};
 }
 
 kv_entry hm_get_or_put(hash_map *hm, const void *key) {
+  kv_entry found = hm_get_entry(hm, key);
+  if (found.found_existing)
+    return found;
   u32 hash = murmur3_32((u8 *)key, hm->key_size, SEED);
   u32 ibkt = hash % hm->capacity;
-  struct hm_node *node = hm->buckets[ibkt];
-  while (node != NULL) {
-    if (eql(key, node->key, hm->key_size)) {
-      return (kv_entry){
-          .found_existing = 1, .key_ptr = node->key, .value_ptr = node->value};
-    }
-    node = node->next;
-  }
   hm->size++;
   struct hm_node *new_node = (struct hm_node *)malloc(sizeof(struct hm_node));
   new_node->key = malloc(hm->key_size);
@@ -221,5 +244,87 @@ b8 get_next(kv_iterator *kv_iter) {
     kv_iter->bucket++;
     kv_iter->entry = kv_iter->hmap->buckets[kv_iter->bucket];
   }
+  kv_iter->value_ptr = kv_iter->entry->value;
+  kv_iter->key_ptr = kv_iter->entry->key;
   return 1;
 };
+
+b8 streql(const void *a, const void *b, u32 size) {
+  string8 *sa = (string8 *)a;
+  string8 *sb = (string8 *)b;
+  if (sa->size != sb->size)
+    return 0;
+  return eql(sa->str, sb->str, sb->size);
+}
+
+str_hash_map *shm_init(u32 capacity, u32 value_size) {
+  str_hash_map *shm = (str_hash_map *)malloc(sizeof(str_hash_map));
+  shm->hm = hm_init(capacity, sizeof(string8), value_size);
+  return shm;
+}
+
+kv_entry shm_get_entry(str_hash_map *shm, const char *key) {
+  string8 key8 = STR8_LIT(key);
+  u32 hash = murmur3_32(key8.str, key8.size, SEED);
+  u32 ibkt = hash % shm->hm->capacity;
+  struct hm_node *node = shm->hm->buckets[ibkt];
+  find_key(node, &key, 0, streql);
+  if (node) {
+    return (kv_entry){
+        .found_existing = 1, .key_ptr = node->key, .value_ptr = node->value};
+  }
+  return (kv_entry){.found_existing = 0, .key_ptr = NULL, .value_ptr = NULL};
+}
+
+string8 clone_to_string8(const char *s) {
+  u64 size = strlen(s);
+  u8 *str = malloc(strlen(s));
+  memcpy(str, s, size);
+  return (string8){.str = str, .size = size};
+}
+
+kv_entry shm_get_or_put(str_hash_map *shm, const char *key) {
+  kv_entry found = shm_get_entry(shm, key);
+  if (found.found_existing)
+    return found;
+  string8 key8 = clone_to_string8(key);
+  u32 hash = murmur3_32(key8.str, key8.size, SEED);
+  u32 ibkt = hash % shm->hm->capacity;
+  shm->hm->size++;
+  struct hm_node *new_node = (struct hm_node *)malloc(sizeof(struct hm_node));
+  new_node->key = malloc(sizeof(string8));
+  memcpy(new_node->key, &key8, sizeof(string8));
+  new_node->value = malloc(shm->hm->value_size);
+  new_node->next = shm->hm->buckets[ibkt];
+  shm->hm->buckets[ibkt] = new_node;
+  return (kv_entry){.found_existing = 0,
+                    .key_ptr = new_node->key,
+                    .value_ptr = new_node->value};
+}
+
+b8 shm_get(str_hash_map *shm, const char *key, void *value_ptr) {
+  kv_entry entry = shm_get_entry(shm, key);
+  if (!entry.found_existing) {
+    return 0;
+  }
+  memcpy(value_ptr, entry.value_ptr, shm->hm->value_size);
+  return 1;
+}
+
+void shm_put(str_hash_map *shm, const char *key, void *value) {
+  kv_entry entry = shm_get_or_put(shm, key);
+  memcpy(entry.value_ptr, value, shm->hm->value_size);
+}
+
+void shm_deinit(str_hash_map *shm) {
+  kv_iterator kvi = hm_iterator(shm->hm);
+  while (get_next(&kvi)) {
+    string8 *s = kvi.key_ptr;
+    free(s->str);
+  }
+  hm_deinit(shm->hm);
+  free(shm);
+}
+
+#endif
+#endif
