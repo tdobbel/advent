@@ -52,6 +52,8 @@ b8 eql(const void *a, const void *b, u32 size);
 struct hm_node *find_key(struct hm_node *bucket, const void *target, u32 ctx,
                          b8 (*cmp_fun)(const void *, const void *, u32));
 
+static u32 ensure_pow2(u32 cap);
+
 hash_map *hm_init(u32 capacity, u32 key_size, u32 value_size);
 kv_entry hm_get_entry(hash_map *hm, const void *key);
 kv_entry hm_get_entry_with_hash(hash_map *hm, const void *key, u32 hash);
@@ -170,8 +172,17 @@ u32 murmur3_32(const u8 *key, u32 len, u32 seed) {
   return h;
 }
 
+static u32 ensure_pow2(u32 cap) {
+  u32 k = 1;
+  while (k < cap) {
+    k <<= 1;
+  }
+  return k;
+}
+
 hash_map *hm_init(u32 capacity, u32 key_size, u32 value_size) {
   hash_map *hm = (hash_map *)malloc(sizeof(hash_map));
+  capacity = ensure_pow2(capacity);
   hm->buckets = (struct hm_node **)malloc(capacity * sizeof(struct hm_node *));
   for (u32 i = 0; i < capacity; ++i) {
     hm->buckets[i] = NULL;
