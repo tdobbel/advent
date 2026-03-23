@@ -80,7 +80,7 @@ typedef struct {
   u64 size;
 } string8;
 
-string8 clone_to_string8(const char *s);
+string8 to_string8(const char *s);
 
 #ifdef VECTOR_IMPLEMENTATION
 
@@ -124,6 +124,12 @@ void vector_free(vector *vec) {
   hm_init(BASE_CAPACITY,                                                       \
           (hash_map_context){.key_size = sizeof(K), .value_size = sizeof(V)},  \
           bytes_eql);
+
+#define STRING_HASHMAP(V)                                                      \
+  hm_init(BASE_CAPACITY,                                                       \
+          (hash_map_context){.key_size = sizeof(string8),                      \
+                             .value_size = sizeof(V)},                         \
+          string8_eql);
 
 static inline u32 murmur_32_scramble(u32 k) {
   k *= 0xcc9e2d51;
@@ -323,7 +329,7 @@ b8 string8_eql(const hash_map_context ctx, const void *a, const void *b) {
   return 1;
 }
 
-string8 clone_to_string8(const char *s) {
+string8 to_string8(const char *s) {
   u64 size = strlen(s);
   u8 *str = (u8 *)malloc(strlen(s));
   memcpy(str, s, size);
