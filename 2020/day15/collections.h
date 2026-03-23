@@ -14,7 +14,7 @@ typedef u8 b8;
 
 #define SEED 0x00000000
 #define BASE_CAPACITY 16
-#define DEFAULT_MAX_LOAD_FACTOR 80
+#define DEFAULT_MAX_LOAD_FACTOR 60
 
 typedef struct {
   u64 elem_size, capacity, size;
@@ -30,8 +30,8 @@ static u32 murmur_32_scramble(u32 k);
 u32 murmur3_32(const u8 *key, u32 len, u32 seed);
 
 struct hm_node {
-  void *key;
-  void *value;
+  u32 hash;
+  u8 *kv;
   struct hm_node *next;
 };
 
@@ -54,6 +54,7 @@ struct hm_node *find_key(struct hm_node *bucket, const void *target, u32 ctx,
 
 hash_map *hm_init(u32 capacity, u32 key_size, u32 value_size);
 kv_entry hm_get_entry(hash_map *hm, const void *key);
+kv_entry hm_get_entry_with_hash(hash_map *hm, const void *key, u32 hash);
 kv_entry hm_get_or_put(hash_map *hm, const void *key);
 void grow_if_needed(hash_map *hm);
 b8 hm_get(hash_map *hm, const void *key, void *value_ptr);
@@ -86,6 +87,7 @@ typedef struct {
 b8 streql(const void *a, const void *b, u32 size);
 str_hash_map *shm_init(u32 capacity, u32 value_size);
 kv_entry shm_get_entry(str_hash_map *shm, const char *key);
+kv_entry shm_get_entry_with_hash(hash_map *hm, string8 key, u32 hash);
 kv_entry shm_get_or_put(str_hash_map *shm, const char *key);
 b8 shm_get(str_hash_map *shm, const char *key, void *value_ptr);
 void shm_put(str_hash_map *shm, const char *key, void *value);
@@ -195,7 +197,7 @@ struct hm_node *find_key(struct hm_node *bucket, const void *target, u32 ctx,
                          b8 (*cmp_fun)(const void *, const void *, u32)) {
   struct hm_node *node = bucket;
   while (node) {
-    if (cmp_fun(node->key, target, ctx)) {
+    if (cmp_fun(node->kv, target, ctx)) {
       return node;
     }
     node = node->next;
@@ -203,16 +205,21 @@ struct hm_node *find_key(struct hm_node *bucket, const void *target, u32 ctx,
   return NULL;
 }
 
-kv_entry hm_get_entry(hash_map *hm, const void *key) {
-  u32 hash = murmur3_32((u8 *)key, hm->key_size, SEED);
+kv_entry hm_get_entry_with_hash(hash_map *hm, const void *key, u32 hash) {
   u32 ibkt = hash & (hm->capacity - 1);
   struct hm_node *bucket = hm->buckets[ibkt];
   struct hm_node *node = find_key(bucket, key, hm->key_size, eql);
   if (node) {
-    return (kv_entry){
-        .found_existing = 1, .key_ptr = node->key, .value_ptr = node->value};
+    return (kv_entry){.found_existing = 1,
+                      .key_ptr = node->kv,
+                      .value_ptr = node->kv + hm->key_size};
   }
   return (kv_entry){.found_existing = 0, .key_ptr = NULL, .value_ptr = NULL};
+}
+
+kv_entry hm_get_entry(hash_map *hm, const void *key) {
+  u32 hash = murmur3_32((u8 *)key, hm->key_size, SEED);
+  return hm_get_entry_with_hash(hm, key, hash);
 }
 
 void grow_if_needed(hash_map *hm) {
@@ -229,8 +236,7 @@ void grow_if_needed(hash_map *hm) {
     struct hm_node *node = hm->buckets[i];
     struct hm_node *tmp;
     while (node) {
-      u32 hash = murmur3_32((u8 *)node->key, hm->key_size, SEED);
-      u32 ibkt = hash & (new_cap - 1);
+      u32 ibkt = node->hash & (new_cap - 1);
       tmp = node->next;
       node->next = buckets[ibkt];
       buckets[ibkt] = node;
@@ -243,23 +249,23 @@ void grow_if_needed(hash_map *hm) {
 }
 
 kv_entry hm_get_or_put(hash_map *hm, const void *key) {
-  kv_entry found = hm_get_entry(hm, key);
+  u32 hash = murmur3_32((u8 *)key, hm->key_size, SEED);
+  kv_entry found = hm_get_entry_with_hash(hm, key, hash);
   if (found.found_existing) {
     return found;
   }
   grow_if_needed(hm);
-  u32 hash = murmur3_32((u8 *)key, hm->key_size, SEED);
   u32 ibkt = hash & (hm->capacity - 1);
   hm->size++;
   struct hm_node *new_node = (struct hm_node *)malloc(sizeof(struct hm_node));
-  new_node->key = malloc(hm->key_size);
-  memcpy(new_node->key, key, hm->key_size);
-  new_node->value = malloc(hm->value_size);
+  new_node->hash = hash;
+  new_node->kv = (u8 *)malloc(hm->key_size + hm->value_size);
+  memcpy(new_node->kv, key, hm->key_size);
   new_node->next = hm->buckets[ibkt];
   hm->buckets[ibkt] = new_node;
   return (kv_entry){.found_existing = 0,
-                    .key_ptr = new_node->key,
-                    .value_ptr = new_node->value};
+                    .key_ptr = new_node->kv,
+                    .value_ptr = new_node->kv + hm->key_size};
 }
 
 void hm_put(hash_map *hm, const void *key, const void *value) {
@@ -281,8 +287,7 @@ void hm_flush(hash_map *hm) {
     struct hm_node *entry = hm->buckets[i];
     struct hm_node *tmp;
     while (entry) {
-      free(entry->key);
-      free(entry->value);
+      free(entry->kv);
       tmp = entry->next;
       free(entry);
       entry = tmp;
@@ -309,22 +314,22 @@ kv_iterator hm_iterator(hash_map *hm) {
   return (kv_iterator){.hmap = hm, .index = 0, .bucket = 0, .entry = NULL};
 }
 
-b8 get_next(kv_iterator *kv_iter) {
-  if (kv_iter->index == kv_iter->hmap->size) {
+b8 get_next(kv_iterator *kvi) {
+  if (kvi->index == kvi->hmap->size) {
     return 0;
   }
-  if (kv_iter->index == 0) {
-    kv_iter->entry = kv_iter->hmap->buckets[0];
+  if (kvi->index == 0) {
+    kvi->entry = kvi->hmap->buckets[0];
   } else {
-    kv_iter->entry = kv_iter->entry->next;
+    kvi->entry = kvi->entry->next;
   }
-  kv_iter->index++;
-  while (kv_iter->entry == NULL) {
-    kv_iter->bucket++;
-    kv_iter->entry = kv_iter->hmap->buckets[kv_iter->bucket];
+  kvi->index++;
+  while (kvi->entry == NULL) {
+    kvi->bucket++;
+    kvi->entry = kvi->hmap->buckets[kvi->bucket];
   }
-  kv_iter->value_ptr = kv_iter->entry->value;
-  kv_iter->key_ptr = kv_iter->entry->key;
+  kvi->value_ptr = kvi->entry->kv;
+  kvi->key_ptr = kvi->entry->kv + kvi->hmap->key_size;
   return 1;
 }
 
@@ -346,44 +351,50 @@ str_hash_map *shm_init(u32 capacity, u32 value_size) {
   return shm;
 }
 
-kv_entry shm_get_entry(str_hash_map *shm, const char *key) {
-  string8 key8 = STR8_LIT(key);
-  u32 hash = murmur3_32(key8.str, key8.size, SEED);
-  u32 ibkt = hash & (shm->hm->capacity - 1);
-  struct hm_node *bucket = shm->hm->buckets[ibkt];
-  struct hm_node *node = find_key(bucket, &key8, key8.size, streql);
+kv_entry shm_get_entry_with_hash(hash_map *hm, string8 key, u32 hash) {
+  u32 ibkt = hash & (hm->capacity - 1);
+  struct hm_node *bucket = hm->buckets[ibkt];
+  struct hm_node *node = find_key(bucket, &key, key.size, streql);
   if (node) {
-    return (kv_entry){
-        .found_existing = 1, .key_ptr = node->key, .value_ptr = node->value};
+    return (kv_entry){.found_existing = 1,
+                      .key_ptr = node->kv,
+                      .value_ptr = node->kv + hm->key_size};
   }
   return (kv_entry){.found_existing = 0, .key_ptr = NULL, .value_ptr = NULL};
 }
 
+kv_entry shm_get_entry(str_hash_map *shm, const char *key) {
+  string8 key8 = STR8_LIT(key);
+  u32 hash = murmur3_32(key8.str, key8.size, SEED);
+  return shm_get_entry_with_hash(shm->hm, key8, hash);
+}
+
 string8 clone_to_string8(const char *s) {
   u64 size = strlen(s);
-  u8 *str = malloc(strlen(s));
+  u8 *str = (u8 *)malloc(strlen(s));
   memcpy(str, s, size);
   return (string8){.str = str, .size = size};
 }
 
 kv_entry shm_get_or_put(str_hash_map *shm, const char *key) {
-  kv_entry found = shm_get_entry(shm, key);
+  string8 key8 = STR8_LIT(key);
+  u32 hash = murmur3_32(key8.str, key8.size, SEED);
+  kv_entry found = shm_get_entry_with_hash(shm->hm, key8, hash);
   if (found.found_existing)
     return found;
   grow_if_needed(shm->hm);
-  string8 key8 = clone_to_string8(key);
-  u32 hash = murmur3_32(key8.str, key8.size, SEED);
+  key8 = clone_to_string8(key);
   u32 ibkt = hash & (shm->hm->capacity - 1);
   shm->hm->size++;
   struct hm_node *new_node = (struct hm_node *)malloc(sizeof(struct hm_node));
-  new_node->key = malloc(sizeof(string8));
-  memcpy(new_node->key, &key8, sizeof(string8));
-  new_node->value = malloc(shm->hm->value_size);
+  new_node->hash = hash;
+  new_node->kv = (u8 *)malloc(sizeof(string8) + shm->hm->value_size);
+  memcpy(new_node->kv, &key8, sizeof(string8));
   new_node->next = shm->hm->buckets[ibkt];
   shm->hm->buckets[ibkt] = new_node;
   return (kv_entry){.found_existing = 0,
-                    .key_ptr = new_node->key,
-                    .value_ptr = new_node->value};
+                    .key_ptr = new_node->kv,
+                    .value_ptr = new_node->kv + shm->hm->key_size};
 }
 
 b8 shm_get(str_hash_map *shm, const char *key, void *value_ptr) {
@@ -403,7 +414,7 @@ void shm_put(str_hash_map *shm, const char *key, void *value) {
 void shm_deinit(str_hash_map *shm) {
   kv_iterator kvi = hm_iterator(shm->hm);
   while (get_next(&kvi)) {
-    string8 *s = kvi.key_ptr;
+    string8 *s = (string8 *)kvi.key_ptr;
     free(s->str);
   }
   hm_deinit(shm->hm);
