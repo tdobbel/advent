@@ -219,17 +219,27 @@ void grow_if_needed(hash_map *hm) {
   u32 load = (100 * hm->size) / hm->capacity;
   if (load < DEFAULT_MAX_LOAD_FACTOR)
     return;
-  hash_map *grown = hm_init(hm->capacity * 2, hm->key_size, hm->value_size);
-  kv_iterator kvi = hm_iterator(hm);
-  while (get_next(&kvi)) {
-    hm_put(grown, kvi.key_ptr, kvi.value_ptr);
+  u32 new_cap = hm->capacity * 2;
+  struct hm_node **buckets =
+      (struct hm_node **)malloc(new_cap * sizeof(struct hm_node *));
+  for (u32 i = 0; i < new_cap; ++i) {
+    buckets[i] = NULL;
   }
-  hm_flush(hm);
+  for (u32 i = 0; i < hm->capacity; ++i) {
+    struct hm_node *node = hm->buckets[i];
+    struct hm_node *tmp;
+    while (node) {
+      u32 hash = murmur3_32((u8 *)node->key, hm->key_size, SEED);
+      u32 ibkt = hash & (new_cap - 1);
+      tmp = node->next;
+      node->next = buckets[ibkt];
+      buckets[ibkt] = node;
+      node = tmp;
+    }
+  }
   free(hm->buckets);
-  hm->buckets = grown->buckets;
-  hm->capacity = grown->capacity;
-  hm->size = grown->size;
-  free(grown);
+  hm->buckets = buckets;
+  hm->capacity = new_cap;
 }
 
 kv_entry hm_get_or_put(hash_map *hm, const void *key) {
