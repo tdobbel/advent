@@ -302,7 +302,7 @@ kv_entry hm_get_entry(hash_map *hm, const void *key) {
   if (hm->isfree[indx])
     return (kv_entry){.found_existing = 0, .key_ptr = NULL, .value_ptr = NULL};
   u8 *key_ptr = hm->keys + indx * hm->ctx.key_size;
-  u8 *value_ptr = hm->keys + indx * hm->ctx.value_size;
+  u8 *value_ptr = hm->values + indx * hm->ctx.value_size;
   return (kv_entry){
       .found_existing = 1, .key_ptr = key_ptr, .value_ptr = value_ptr};
 }
