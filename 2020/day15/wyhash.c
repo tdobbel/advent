@@ -5,8 +5,11 @@
 #define uint128_t __uint128_t
 
 typedef uint64_t u64;
+typedef uint32_t u32;
 typedef uint128_t u128;
 typedef uint8_t u8;
+
+#define READ4(a) (u64)(*(u32 *)(a))
 
 const u64 secret[4] = {
     0xa0761d6478bd642f,
@@ -40,8 +43,8 @@ static inline u64 mix(u64 a_, u64 b_) {
 
 static inline void wy_round(Wyhash *self, const u8 *input) {
   for (u64 i = 0; i < 3; ++i) {
-    u64 a = *(u128 *)(input + 8 * (2 * i));
-    u64 b = *(u128 *)(input + 8 * (2 * i + 1));
+    u64 a = *(u64 *)(input + 8 * (2 * i));
+    u64 b = *(u64 *)(input + 8 * (2 * i + 1));
     self->state[i] = mix(a ^ secret[i + 1], b ^ self->state[i]);
   }
 }
@@ -60,7 +63,7 @@ static inline void wyhash_small_key(Wyhash *self, const u8 *input,
   if (input_len >= 4) {
     u64 end = input_len - 4;
     u64 quarter = (input_len >> 3) << 2;
-    self->a = (*(u64 *)input << 32) | *(u64 *)(input + quarter);
+    self->a = (READ4(input) << 32) | READ4(input + quarter);
     self->b = (*(u64 *)(input + end) << 32) | *(u64 *)(input + end - quarter);
   } else if (input_len > 0) {
     self->a = ((u64)input[0] << 16) | ((u64)input[input_len >> 1] << 8) |
@@ -85,7 +88,7 @@ static inline void final1(Wyhash *self, const u8 *input_lb, u64 input_len,
 
   u64 i = 0;
   while (i + 16 < len) {
-    self->state[0] = mix((*(u64 *)(input + 1)) ^ secret[1],
+    self->state[0] = mix((*(u64 *)(input + i)) ^ secret[1],
                          (*(u64 *)(input + i + 8)) ^ self->state[0]);
     i += 16;
   }
@@ -121,7 +124,9 @@ u64 wyhash(const u8 *input, u64 input_len, u64 seed) {
 }
 
 int main(void) {
-  u64 hash = wyhash((u8 *)"message digest", 14, 3);
-  printf("%lu - %lu\n", hash, 0x8619124089a3a16b);
+  u64 expected = 0xc39cab13b115aad3;
+  char *input = "12345678901234567890123456789012345678901234567890123456789012345678901234567890";
+  u64 hash = wyhash((u8 *)input, 80, 6);
+  printf("%lu - %lu\n", hash, expected);
   return 0;
 }
