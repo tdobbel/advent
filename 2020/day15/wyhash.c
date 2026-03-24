@@ -63,9 +63,8 @@ static inline void wyhash_small_key(Wyhash *self, const u8 *input,
     self->a = (*(u64 *)input << 32) | *(u64 *)(input + quarter);
     self->b = (*(u64 *)(input + end) << 32) | *(u64 *)(input + end - quarter);
   } else if (input_len > 0) {
-    u8 last_bit = *(input + input_len - 1);
-    self->a = (*(u64 *)input << 16) |
-              (*(u64 *)(input + (input_len >> 1)) << 8) | (u64)last_bit;
+    self->a = ((u64)input[0] << 16) | ((u64)input[input_len >> 1] << 8) |
+              (u64)input[input_len - 1];
     self->b = 0;
   } else {
     self->a = 0;
@@ -122,9 +121,7 @@ u64 wyhash(const u8 *input, u64 input_len, u64 seed) {
 }
 
 int main(void) {
-  u64 hash = wyhash((u8 *)"1234567890123456789012345678901234567890123456789012"
-                          "3456789012345678901",
-                    71, 6);
-  printf("%lu - %lu\n", hash, 0xc39cab13b115aad3);
+  u64 hash = wyhash((u8 *)"message digest", 14, 3);
+  printf("%lu - %lu\n", hash, 0x8619124089a3a16b);
   return 0;
 }
