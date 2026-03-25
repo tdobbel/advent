@@ -59,7 +59,6 @@ static inline u64 mix(u64 a_, u64 b_) {
 }
 
 static inline void wy_round(Wyhash *self, const u8 *input);
-Wyhash wyhash_init(u64 seed);
 static inline void wyhash_small_key(Wyhash *self, const u8 *input,
                                     u64 input_len);
 static inline void final0(Wyhash *self) {
@@ -68,6 +67,8 @@ static inline void final0(Wyhash *self) {
 static inline void final1(Wyhash *self, const u8 *input_lb, u64 input_len,
                           u64 start_pos);
 static inline u64 final2(Wyhash *self);
+
+Wyhash wyhash_init(u64 seed);
 u64 wyhash(const u8 *input, u64 input_len, u64 seed);
 
 typedef struct {
@@ -87,7 +88,7 @@ typedef struct {
   hash_map_context ctx;
   u8 *keys;
   u8 *values;
-  b8 *isfree;
+  u8 *fingerprint; // bit 1: 0 if free, 1 if used, 7 other bits -> hash
   eq_fn eq;
 } hash_map;
 
@@ -250,6 +251,8 @@ u64 wyhash(const u8 *input, u64 input_len, u64 seed) {
                              .value_size = sizeof(V)},                         \
           string8_eql);
 
+#define ISUSED(hm, indx) ((hm)->fingerprint[indx] & 0x01)
+
 static u64 ensure_pow2(u64 cap) {
   u64 k = 1;
   while (k < cap) {
@@ -267,8 +270,8 @@ hash_map *hm_init(u64 capacity, hash_map_context ctx, eq_fn eq) {
   hm->keys = (u8 *)malloc(cap * ctx.key_size);
   hm->values = (u8 *)malloc(cap * ctx.value_size);
   hm->eq = eq;
-  hm->isfree = (u8 *)malloc(cap);
-  memset(hm->isfree, 1, cap);
+  hm->fingerprint = (u8 *)malloc(cap); // first bit 7 bits for the hash and 1 bit for used or not
+  memset(hm->fingerprint, 0x00, cap);
   return hm;
 }
 
@@ -286,20 +289,26 @@ u64 hm_get_index(hash_map *hm, const void *key) {
   u64 hash = wyhash(key, hm->ctx.key_size, SEED);
   u64 indx = hash & (hm->capacity - 1);
   u64 limit = hm->capacity;
-  while (!hm->isfree[indx] && limit > 0) {
-    u8 *test_key = hm->keys + indx * hm->ctx.key_size;
-    if (hm->eq(hm->ctx, test_key, key))
-      return indx;
+  u8 fingerprint = hash >> 57;
+  u64 ksz = hm->ctx.key_size;
+  while (ISUSED(hm, indx) && limit > 0) {
+    u8 fp = hm->fingerprint[indx] >> 1;
+    if (fp == fingerprint) {
+      const u8 *test_key = hm->keys + indx * ksz;
+      if (hm->eq(hm->ctx, test_key, key))
+        return indx;
+    }
     indx = (indx + 1) & (hm->capacity - 1);
     limit--;
   }
   assert(limit > 0);
+  hm->fingerprint[indx] = fingerprint << 1;
   return indx;
 }
 
 kv_entry hm_get_entry(hash_map *hm, const void *key) {
   u64 indx = hm_get_index(hm, key);
-  if (hm->isfree[indx])
+  if (!ISUSED(hm, indx))
     return (kv_entry){.found_existing = 0, .key_ptr = NULL, .value_ptr = NULL};
   u8 *key_ptr = hm->keys + indx * hm->ctx.key_size;
   u8 *value_ptr = hm->values + indx * hm->ctx.value_size;
@@ -311,10 +320,10 @@ void hm_put_assume_capacity(hash_map *hm, const void *key, const void *value) {
   u64 indx = hm_get_index(hm, key);
   u8 *value_ptr = hm->values + indx * hm->ctx.value_size;
   memcpy(value_ptr, value, hm->ctx.value_size);
-  if (hm->isfree[indx]) {
+  if (!ISUSED(hm, indx)) {
     u8 *key_ptr = hm->keys + indx * hm->ctx.key_size;
     memcpy(key_ptr, key, hm->ctx.key_size);
-    hm->isfree[indx] = 0;
+    hm->fingerprint[indx] |= 0x01;
     hm->size++;
   }
 }
@@ -326,7 +335,7 @@ void grow_if_needed(hash_map *hm) {
   u64 new_cap = hm->capacity * 2;
   hash_map *map = hm_init(new_cap, hm->ctx, hm->eq);
   for (u64 i = 0; i < hm->capacity; ++i) {
-    if (hm->isfree[i])
+    if (!ISUSED(hm, i))
       continue;
     u8 *key_ptr = hm->keys + i * hm->ctx.key_size;
     u8 *value_ptr = hm->values + i * hm->ctx.value_size;
@@ -335,10 +344,10 @@ void grow_if_needed(hash_map *hm) {
   hm->capacity = new_cap;
   free(hm->values);
   free(hm->keys);
-  free(hm->isfree);
+  free(hm->fingerprint);
   hm->values = map->values;
   hm->keys = map->keys;
-  hm->isfree = map->isfree;
+  hm->fingerprint = map->fingerprint;
   free(map);
 }
 
@@ -347,12 +356,12 @@ kv_entry hm_get_or_put(hash_map *hm, const void *key) {
   u64 indx = hm_get_index(hm, key);
   u8 *value_ptr = hm->values + hm->ctx.value_size * indx;
   u8 *key_ptr = hm->keys + hm->ctx.key_size * indx;
-  if (!hm->isfree[indx]) {
+  if (ISUSED(hm, indx)) {
     return (kv_entry){
         .found_existing = 1, .value_ptr = value_ptr, .key_ptr = key_ptr};
   }
   memcpy(key_ptr, key, hm->ctx.key_size);
-  hm->isfree[indx] = 0;
+  hm->fingerprint[indx] |= 0x01;
   hm->size++;
   return (kv_entry){
       .found_existing = 0, .key_ptr = key_ptr, .value_ptr = value_ptr};
@@ -366,7 +375,7 @@ void hm_put(hash_map *hm, const void *key, const void *value) {
 void hm_deinit(hash_map *hm) {
   free(hm->keys);
   free(hm->values);
-  free(hm->isfree);
+  free(hm->fingerprint);
   free(hm);
 }
 
@@ -383,7 +392,7 @@ b8 get_next(kv_iterator *kvi) {
     return 0;
   if (kvi->cntr < kvi->hm->size)
     kvi->indx++;
-  while (kvi->hm->isfree[kvi->indx]) {
+  while (!ISUSED(kvi->hm, kvi->indx)) {
     kvi->indx++;
   }
   kvi->cntr--;
