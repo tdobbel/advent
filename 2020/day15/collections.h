@@ -149,6 +149,15 @@ typedef struct {
 kv_iterator hm_iterator(hash_map *hm);
 b8 get_next(kv_iterator *kv_iter);
 
+#ifdef STRING_IMPLEMENTATION
+
+#include "string8.h"
+
+vector *split_whitespace(string8 s);
+b8 string8_eql(const hash_map_context ctx, const void *a, const void *b);
+
+#endif
+
 #ifdef VECTOR_IMPLEMENTATION
 
 vector *vector_create(u64 elem_size) {
