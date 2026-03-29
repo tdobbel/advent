@@ -6,6 +6,9 @@
 #include <stdlib.h>
 #include <string.h>
 
+#define STRING_IMPLEMENTATION
+#include "string8.h"
+
 #define uint128_t __uint128_t
 
 typedef uint128_t u128;
@@ -28,6 +31,10 @@ vector *vector_create(u64 elem_size);
 void vector_free(vector *vec);
 void *vector_get(vector *vec, u64 index);
 void *vector_append_get(vector *vec);
+vector *split_whitespace(string8 s);
+
+#define VEC_CREATE(T) vector_create(sizeof(T))
+#define VEC_PUSH(vec, T, x) (*(T *)vector_append_get((vec)) = (x))
 
 #define READ4(a) (u64)(*(u32 *)(a))
 
@@ -117,13 +124,6 @@ typedef struct {
 kv_iterator hm_iterator(hash_map *hm);
 b8 get_next(kv_iterator *kv_iter);
 
-typedef struct {
-  u8 *str;
-  u64 size;
-} string8;
-
-string8 to_string8(const char *s);
-
 #ifdef VECTOR_IMPLEMENTATION
 
 vector *vector_create(u64 elem_size) {
@@ -155,8 +155,22 @@ void vector_free(vector *vec) {
   free(vec);
 }
 
-#define VEC_CREATE(T) vector_create(sizeof(T))
-#define VEC_PUSH(vec, T, x) (*(T *)vector_append_get((vec)) = (x))
+vector *split_whitespace(string8 s) {
+  vector *vec = VEC_CREATE(string8);
+  string8 s2 = str_trim(s);
+  while (s2.size > 0) {
+    u64 start = 0;
+    u64 end = start;
+    while (end < s2.size && !isspace(s2.str[end])) {
+      end++;
+    }
+    string8 word = (string8){.str = s2.str, .size = end - start};
+    VEC_PUSH(vec, string8, word);
+    string8 r = (string8){.str = s2.str + end, .size = s2.size - end};
+    s2 = str_trim_left(r);
+  }
+  return vec;
+}
 
 #endif
 
@@ -270,7 +284,8 @@ hash_map *hm_init(u64 capacity, hash_map_context ctx, eq_fn eq) {
   hm->keys = (u8 *)malloc(cap * ctx.key_size);
   hm->values = (u8 *)malloc(cap * ctx.value_size);
   hm->eq = eq;
-  hm->fingerprint = (u8 *)malloc(cap); // first bit 7 bits for the hash and 1 bit for used or not
+  hm->fingerprint = (u8 *)malloc(
+      cap); // first bit 7 bits for the hash and 1 bit for used or not
   memset(hm->fingerprint, 0x00, cap);
   return hm;
 }
@@ -401,10 +416,6 @@ b8 get_next(kv_iterator *kvi) {
   return 1;
 }
 
-#define STR8_LIT(s) ((string8){.str = (u8 *)(s), .size = strlen((s))})
-#define STR8_FMT "%.*s"
-#define STR8_UNWRAP(s) (int)(s).size, (char *)(s).str
-
 b8 string8_eql(const hash_map_context ctx, const void *a, const void *b) {
   assert(ctx.key_size == sizeof(string8));
   string8 *sa = (string8 *)a;
@@ -416,13 +427,6 @@ b8 string8_eql(const hash_map_context ctx, const void *a, const void *b) {
       return 0;
   }
   return 1;
-}
-
-string8 to_string8(const char *s) {
-  u64 size = strlen(s);
-  u8 *str = (u8 *)malloc(strlen(s));
-  memcpy(str, s, size);
-  return (string8){.str = str, .size = size};
 }
 
 #endif
