@@ -8,6 +8,7 @@
 
 typedef uint64_t u64;
 typedef uint8_t u8;
+typedef u8 b8;
 
 typedef struct {
   u8 *str;
@@ -18,10 +19,11 @@ typedef struct {
 #define STR8_FMT "%.*s"
 #define STR8_UNWRAP(s) (int)(s).size, (char *)(s).str
 
-string8 str_trim_right(string8 s);
 string8 str_trim_left(string8 s);
+string8 str_trim_right(string8 s);
 string8 str_trim(string8 s);
 string8 to_string8(const char *s);
+b8 str_equal(string8 s1, string8 s2);
 
 #ifdef STRING_IMPLEMENTATION
 
@@ -41,13 +43,23 @@ string8 str_trim_right(string8 s) {
   return (string8){.str = s.str, .size = i};
 }
 
-string8 str_trim(string8 s) { return str_trim_left(str_trim_right(s)); }
+string8 str_trim(string8 s) { return str_trim_right(str_trim_left(s)); }
 
 string8 to_string8(const char *s) {
   u64 size = strlen(s);
   u8 *str = (u8 *)malloc(strlen(s));
   memcpy(str, s, size);
   return (string8){.str = str, .size = size};
+}
+
+b8 str_equal(string8 s1, string8 s2) {
+  if (s1.size != s2.size)
+    return 0;
+  for (u64 i = 0; i < s1.size; ++i) {
+    if (s1.str[i] != s2.str[i])
+      return 0;
+  }
+  return 1;
 }
 
 #endif
