@@ -6,8 +6,9 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define STRING_IMPLEMENTATION
+#ifdef STRING_IMPLEMENTATION
 #include "string8.h"
+#endif
 
 #define uint128_t __uint128_t
 
@@ -31,7 +32,10 @@ vector *vector_create(u64 elem_size);
 void vector_free(vector *vec);
 void *vector_get(vector *vec, u64 index);
 void *vector_append_get(vector *vec);
+
+#ifdef STRING_IMPLEMENTATION
 vector *split_whitespace(string8 s);
+#endif
 
 #define VEC_CREATE(T) vector_create(sizeof(T))
 #define VEC_PUSH(vec, T, x) (*(T *)vector_append_get((vec)) = (x))
@@ -83,6 +87,9 @@ typedef struct {
 } hash_map_context;
 
 typedef b8 (*eq_fn)(const hash_map_context ctx, const void *, const void *);
+typedef u64 (*hash_fn)(const hash_map_context, const void *);
+
+u64 wyhash_auto(const hash_map_context ctx, const void *input);
 
 typedef struct {
   b8 found_existing;
@@ -96,15 +103,15 @@ typedef struct {
   u8 *keys;
   u8 *values;
   u8 *fingerprint; // bit 1: 0 if free, 1 if used, 7 other bits -> hash
+  hash_fn hash;
   eq_fn eq;
 } hash_map;
 
 b8 bytes_eql(const hash_map_context ctx, const void *a, const void *b);
-b8 string8_eql(const hash_map_context ctx, const void *a, const void *b);
 
 static u64 ensure_pow2(u64 cap);
 
-hash_map *hm_init(u64 capacity, hash_map_context ctx, eq_fn eq);
+hash_map *hm_init(u64 capacity, hash_map_context ctx, hash_fn hash, eq_fn eq);
 u64 hm_get_index(hash_map *hm, const void *key);
 kv_entry hm_get_entry(hash_map *hm, const void *key);
 kv_entry hm_get_or_put(hash_map *hm, const void *key);
@@ -113,6 +120,24 @@ b8 hm_get(hash_map *hm, const void *key, void *value_ptr);
 void hm_put(hash_map *hm, const void *key, const void *value);
 void hm_put_assume_capacity(hash_map *hm, const void *key, const void *value);
 void hm_deinit(hash_map *hm);
+
+#define AUTO_HASHMAP(K, V)                                                     \
+  hm_init(BASE_CAPACITY,                                                       \
+          (hash_map_context){.key_size = sizeof(K), .value_size = sizeof(V)},  \
+          wyhash_auto, bytes_eql);
+
+#ifdef STRING_IMPLEMENTATION
+
+b8 string8_eql(const hash_map_context ctx, const void *a, const void *b);
+u64 wyhash_string8(const hash_map_context ctx, const void *strkey);
+
+#define STRING_HASHMAP(V)                                                      \
+  hm_init(BASE_CAPACITY,                                                       \
+          (hash_map_context){.key_size = sizeof(string8),                      \
+                             .value_size = sizeof(V)},                         \
+          wyhash_string8, string8_eql);
+
+#endif
 
 typedef struct {
   hash_map *hm;
@@ -155,6 +180,8 @@ void vector_free(vector *vec) {
   free(vec);
 }
 
+#ifdef STRING_IMPLEMENTATION
+
 vector *split_whitespace(string8 s) {
   vector *vec = VEC_CREATE(string8);
   string8 s2 = str_trim(s);
@@ -171,6 +198,8 @@ vector *split_whitespace(string8 s) {
   }
   return vec;
 }
+
+#endif
 
 #endif
 
@@ -254,16 +283,9 @@ u64 wyhash(const u8 *input, u64 input_len, u64 seed) {
   return final2(&self);
 }
 
-#define AUTO_HASHMAP(K, V)                                                     \
-  hm_init(BASE_CAPACITY,                                                       \
-          (hash_map_context){.key_size = sizeof(K), .value_size = sizeof(V)},  \
-          bytes_eql);
-
-#define STRING_HASHMAP(V)                                                      \
-  hm_init(BASE_CAPACITY,                                                       \
-          (hash_map_context){.key_size = sizeof(string8),                      \
-                             .value_size = sizeof(V)},                         \
-          string8_eql);
+u64 wyhash_auto(const hash_map_context ctx, const void *key) {
+  return wyhash((u8 *)key, ctx.key_size, SEED);
+}
 
 #define ISUSED(hm, indx) ((hm)->fingerprint[indx] & 0x01)
 
@@ -275,7 +297,7 @@ static u64 ensure_pow2(u64 cap) {
   return k;
 }
 
-hash_map *hm_init(u64 capacity, hash_map_context ctx, eq_fn eq) {
+hash_map *hm_init(u64 capacity, hash_map_context ctx, hash_fn hash, eq_fn eq) {
   hash_map *hm = (hash_map *)malloc(sizeof(hash_map));
   u64 cap = ensure_pow2(capacity);
   hm->capacity = cap;
@@ -283,6 +305,7 @@ hash_map *hm_init(u64 capacity, hash_map_context ctx, eq_fn eq) {
   hm->ctx = ctx;
   hm->keys = (u8 *)malloc(cap * ctx.key_size);
   hm->values = (u8 *)malloc(cap * ctx.value_size);
+  hm->hash = hash;
   hm->eq = eq;
   hm->fingerprint = (u8 *)malloc(
       cap); // first bit 7 bits for the hash and 1 bit for used or not
@@ -301,7 +324,7 @@ b8 bytes_eql(const hash_map_context ctx, const void *a, const void *b) {
 }
 
 u64 hm_get_index(hash_map *hm, const void *key) {
-  u64 hash = wyhash(key, hm->ctx.key_size, SEED);
+  u64 hash = hm->hash(hm->ctx, key);
   u64 indx = hash & (hm->capacity - 1);
   u64 limit = hm->capacity;
   u8 fingerprint = hash >> 57;
@@ -348,7 +371,7 @@ void grow_if_needed(hash_map *hm) {
   if (load < DEFAULT_MAX_LOAD_FACTOR)
     return;
   u64 new_cap = hm->capacity * 2;
-  hash_map *map = hm_init(new_cap, hm->ctx, hm->eq);
+  hash_map *map = hm_init(new_cap, hm->ctx, hm->hash, hm->eq);
   for (u64 i = 0; i < hm->capacity; ++i) {
     if (!ISUSED(hm, i))
       continue;
@@ -416,6 +439,8 @@ b8 get_next(kv_iterator *kvi) {
   return 1;
 }
 
+#ifdef STRING_IMPLEMENTATION
+
 b8 string8_eql(const hash_map_context ctx, const void *a, const void *b) {
   assert(ctx.key_size == sizeof(string8));
   string8 *sa = (string8 *)a;
@@ -428,6 +453,14 @@ b8 string8_eql(const hash_map_context ctx, const void *a, const void *b) {
   }
   return 1;
 }
+
+u64 wyhash_string8(const hash_map_context ctx, const void *strkey) {
+  assert(ctx.key_size == sizeof(string8));
+  string8 *key = (string8 *)strkey;
+  return wyhash(key->str, key->size, SEED);
+}
+
+#endif
 
 #endif
 #endif
