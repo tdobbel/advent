@@ -35,6 +35,7 @@ void *vector_append_get(vector *vec);
 
 #ifdef STRING_IMPLEMENTATION
 vector *split_whitespace(string8 s);
+vector *split(string8 base, string8 sep);
 #endif
 
 #define VEC_CREATE(T) vector_create(sizeof(T))
@@ -204,6 +205,36 @@ vector *split_whitespace(string8 s) {
     VEC_PUSH(vec, string8, word);
     string8 r = (string8){.str = s2.str + end, .size = s2.size - end};
     s2 = str_trim_left(r);
+  }
+  return vec;
+}
+
+vector *split(string8 base, string8 sep) {
+  vector *vec = VEC_CREATE(string8);
+  u64 start = 0;
+  u64 end = start;
+  if (sep.size > base.size || sep.size == 0) {
+    VEC_PUSH(vec, string8, base);
+    return vec;
+  }
+  while (end <= base.size - sep.size) {
+    string8 test = (string8){.str = base.str + end, .size = sep.size};
+    if (!str_equal(test, sep)) {
+      end++;
+      continue;
+    }
+    // test matched sep
+    if (end > start) {
+      string8 part = (string8){.str = base.str + start, .size = end - start};
+      VEC_PUSH(vec, string8, part);
+    }
+    start = end + sep.size;
+    end = start;
+  }
+  if (start < base.size) {
+    string8 part =
+        (string8){.str = base.str + start, .size = base.size - start};
+    VEC_PUSH(vec, string8, part);
   }
   return vec;
 }
