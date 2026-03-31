@@ -3,7 +3,6 @@
 
 #include <ctype.h>
 #include <stdint.h>
-#include <stdlib.h>
 #include <string.h>
 
 typedef uint64_t u64;
@@ -22,7 +21,6 @@ typedef struct {
 string8 str_trim_left(string8 s);
 string8 str_trim_right(string8 s);
 string8 str_trim(string8 s);
-string8 to_string8(const char *s);
 b8 str_equal(string8 s1, string8 s2);
 
 #ifdef STRING_IMPLEMENTATION
@@ -44,13 +42,6 @@ string8 str_trim_right(string8 s) {
 }
 
 string8 str_trim(string8 s) { return str_trim_right(str_trim_left(s)); }
-
-string8 to_string8(const char *s) {
-  u64 size = strlen(s);
-  u8 *str = (u8 *)malloc(strlen(s));
-  memcpy(str, s, size);
-  return (string8){.str = str, .size = size};
-}
 
 b8 str_equal(string8 s1, string8 s2) {
   if (s1.size != s2.size)
