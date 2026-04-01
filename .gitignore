@@ -3,4 +3,3 @@ example
 target
 *.lock
 main
-Makefile

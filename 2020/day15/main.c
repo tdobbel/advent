@@ -1,7 +1,6 @@
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
 
 #define HASHMAP_IMPLEMENTATION
 #include "collections.h"
