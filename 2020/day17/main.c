@@ -17,6 +17,10 @@ typedef struct {
 } vec3;
 
 typedef struct {
+  i32 x, y, z, w;
+} vec4;
+
+typedef struct {
   b8 active;
   u8 active_neighbors;
 } cell_status;
@@ -66,6 +70,54 @@ void update_cells(hash_map *active_cells) {
   hm_deinit(counter);
 }
 
+
+void update_cells_4d(hash_map *active_cells) {
+  hash_map *counter = AUTO_HASHMAP(vec4, cell_status);
+  kv_iterator kvi = hm_iterator(active_cells);
+  while (get_next(&kvi)) {
+    vec4 pos = *(vec4 *)kvi.key_ptr;
+    cell_status status = (cell_status){true, 0};
+    for (i32 dx = -1; dx <= 1; ++dx) {
+      for (i32 dy = -1; dy <= 1; ++dy) {
+        for (i32 dz = -1; dz <= 1; ++dz) {
+          for (i32 dw = -1; dw <= 1; ++dw) {
+            if (dx == 0 && dy == 0 && dz == 0 && dw == 0)
+              continue;
+            vec4 point = {pos.x + dx, pos.y + dy, pos.z + dz, pos.w + dw};
+            kv_entry active = hm_get_entry(active_cells, &point);
+            if (active.found_existing) {
+              // do not update counter to avoid counting twice
+              status.active_neighbors++;
+              continue;
+            }
+            kv_entry other = hm_get_or_put(counter, &point);
+            cell_status *other_status = (cell_status *)other.value_ptr;
+            if (!other.found_existing) {
+              other_status->active = false;
+              other_status->active_neighbors = 0;
+            }
+            other_status->active_neighbors++;
+          }
+        }
+      }
+    }
+    hm_put(counter, &pos, &status);
+  }
+  hm_reset(active_cells);
+  kvi = hm_iterator(counter);
+  u8 dummy = 0;
+  while (get_next(&kvi)) {
+    cell_status *status = (cell_status *)kvi.value_ptr;
+    b8 activate = !status->active && status->active_neighbors == 3;
+    b8 remains_active = status->active && status->active_neighbors >= 2 &&
+                        status->active_neighbors <= 3;
+    if (activate || remains_active) {
+      hm_put(active_cells, kvi.key_ptr, &dummy);
+    }
+  }
+  hm_deinit(counter);
+}
+
 int main(int argc, char *argv[]) {
   if (argc < 2) {
     fprintf(stderr, "Missing input file\n");
@@ -78,16 +130,19 @@ int main(int argc, char *argv[]) {
     return EXIT_FAILURE;
   }
   hash_map *active_cells = AUTO_HASHMAP(vec3, u8);
+  hash_map *cells_4d = AUTO_HASHMAP(vec4, u8);
   char buffer[BUFSIZE];
-  i32 x, y = 0, z = 0;
+  i32 x, y = 0;
   u8 dummy = 0;
   while (fgets(buffer, BUFSIZE, fp)) {
     i32 n = strcspn(buffer, "\n");
     for (x = 0; x < n; ++x) {
       if (buffer[x] == '.')
         continue;
-      vec3 pos = {x, y, z};
+      vec3 pos = {x, y, 0};
+      vec4 pos4 = {x, y, 0, 0};
       hm_put(active_cells, &pos, &dummy);
+      hm_put(cells_4d, &pos4, &dummy); 
     }
     y++;
   }
@@ -96,9 +151,10 @@ int main(int argc, char *argv[]) {
   // printf("%lu active cells\n", active_cells->size);
   for (u32 i = 0; i < 6; ++i) {
     update_cells(active_cells);
-    // printf("%lu active cells\n", active_cells->size);
+    update_cells_4d(cells_4d);
   }
   printf("Part1: %lu\n", active_cells->size);
+  printf("Part2: %lu\n", cells_4d->size);
 
   hm_deinit(active_cells);
 
