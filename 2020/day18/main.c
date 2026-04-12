@@ -11,6 +11,8 @@
 #define VECTOR_IMPLEMENTATION
 #include "vector.h"
 
+typedef u64 (*eval_fn)(const string8);
+
 #define BUFSIZE 1024
 
 u64 parse(string8 s) {
@@ -21,7 +23,7 @@ u64 parse(string8 s) {
   return res;
 }
 
-u64 eval_no_parenthesis(string8 expr) {
+u64 eval1_no_parenthesis(const string8 expr) {
   string8 sep = STR8_LIT(" ");
   vector *vec = split(expr, sep);
   string8 *data = (string8 *)vec->data;
@@ -38,7 +40,25 @@ u64 eval_no_parenthesis(string8 expr) {
   return total;
 }
 
-u64 solve_part1(string8 *input) {
+u64 eval2_no_parenthesis(const string8 expr) {
+  u64 total = 1;
+  const string8 mult_sep = STR8_LIT(" * ");
+  const string8 sum_sep = STR8_LIT(" + ");
+  vector *split_mult = split(expr, mult_sep);
+  string8 *parts = (string8 *)split_mult->data;
+  for (u64 i = 0; i < split_mult->size; ++i) {
+    u64 sum = 0;
+    vector *split_sum = split(parts[i], sum_sep);
+    string8 *nums = (string8 *)split_sum->data;
+    for (u64 j = 0; j < split_sum->size; ++j) {
+      sum += parse(nums[j]);
+    }
+    total *= sum;
+  }
+  return total;
+}
+
+u64 eval_expression(string8 *input, eval_fn evaluator) {
   while (1) {
     b8 found = false;
     u64 ptr = 0;
@@ -54,7 +74,7 @@ u64 solve_part1(string8 *input) {
         string8 substring =
             (string8){.str = input->str + left + 1, .size = right - left - 1};
 
-        u64 subtotal = eval_no_parenthesis(substring);
+        u64 subtotal = evaluator(substring);
         char num_str[64];
         sprintf(num_str, "%lu", subtotal);
         assert(strlen(num_str) <= size + 1);
@@ -78,7 +98,7 @@ u64 solve_part1(string8 *input) {
     if (!found)
       break;
   }
-  return eval_no_parenthesis(*input);
+  return evaluator(*input);
 }
 
 int main(int argc, char *argv[]) {
@@ -94,14 +114,19 @@ int main(int argc, char *argv[]) {
   }
   char buffer[BUFSIZE];
   u64 part1 = 0;
+  u64 part2 = 0;
   while (fgets(buffer, BUFSIZE, fp)) {
     u64 n = strcspn(buffer, "\n");
     string8 line = {(u8 *)buffer, n};
-    part1 += solve_part1(&line);
+    string8 line_dup = str_dup(line);
+    part1 += eval_expression(&line, eval1_no_parenthesis);
+    part2 += eval_expression(&line_dup, eval2_no_parenthesis);
+    free(line_dup.str);
   }
   fclose(fp);
 
   printf("Part 1: %lu\n", part1);
+  printf("Part 2: %lu\n", part2);
 
   return EXIT_SUCCESS;
 }
