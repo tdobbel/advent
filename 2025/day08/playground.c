@@ -58,7 +58,8 @@ void add_junction(u64 *n_circuit, vector **circuits, u64 a, u64 b) {
 void loadtxt(const char *filename, u64 *n, f64 **ptr) {
   string8 filecontent = {0};
   str_read_file(filename, &filecontent);
-  vector *line_vec = split(filecontent, STR8_LIT("\n"));
+  vector *line_vec = VEC_CREATE(string8);
+  split(line_vec, filecontent, STR8_LIT("\n"));
   *n = line_vec->size;
   *ptr = (f64 *)malloc(DIM * (*n) * sizeof(f64));
   f64 *xyz = *ptr;

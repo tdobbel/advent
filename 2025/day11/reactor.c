@@ -73,21 +73,23 @@ int main(int argc, char *argv[]) {
   hash_map *name_map = STRING_HASHMAP(u32);
   hash_map *topo = AUTO_HASHMAP(u32, vector *);
 
-  vector *line_vec = split(fc, STR8_LIT("\n"));
+  vector *line_vec = VEC_CREATE(string8);
+  split(line_vec, fc, STR8_LIT("\n"));
   string8 *lines = line_vec->data;
   string8 splitted[2];
+  vector *neighbors_vec = VEC_CREATE(string8);
   u32 iname = 0;
   for (u64 i = 0; i < line_vec->size; ++i) {
     str_split_once(splitted, lines[i], STR8_LIT(": "));
     u32 ia = get_name_id(name_map, splitted[0], &iname);
-    vector *neighbors_vec = split_whitespace(splitted[1]);
+    split_whitespace(neighbors_vec, splitted[1]);
     string8 *neighbors = (string8 *)neighbors_vec->data;
     for (u32 j = 0; j < neighbors_vec->size; ++j) {
       u32 ib = get_name_id(name_map, neighbors[j], &iname);
       add_neighbor(topo, ia, ib);
     }
-    vector_free(neighbors_vec);
   }
+  vector_free(neighbors_vec);
   vector_free(line_vec);
 
   string8 key;
