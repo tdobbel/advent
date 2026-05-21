@@ -33,8 +33,9 @@ const Monkey = struct {
     monkey_true: usize = undefined,
     monkey_false: usize = undefined,
     operation: MonkeyOperation = undefined,
+    counter: u32 = 0,
 
-    pub fn apply(self: *const Monkey, x: u32) usize {
+    pub fn apply_rule(self: *const Monkey, x: u32) usize {
         return if (x % self.divider == 0) self.monkey_true else self.monkey_false;
     }
 
@@ -49,7 +50,7 @@ const Monkey = struct {
     pub fn parse_worry_levels(self: *Monkey, line: []const u8) !void {
         var i: usize = 0;
         while (line[i] != ':') : (i += 1) {}
-        const nums: [] const u8 = line[(i + 2)..];
+        const nums: []const u8 = line[(i + 2)..];
         self.worry_levels = std.array_list.Managed(u32).init(self.allocator);
         var split_iter = std.mem.splitSequence(u8, nums, ", ");
         while (split_iter.next()) |item| {
@@ -77,6 +78,27 @@ const Monkey = struct {
     }
 };
 
+pub fn next_round(monkeys: []Monkey, divide_by_three: bool) !void {
+    for (0..monkeys.len) |i| {
+        var monkey = &monkeys[i];
+        while (monkey.worry_levels.pop()) |old| {
+            var w = monkey.operation.apply(old);
+            if (divide_by_three) {
+                w /= 3;
+            }
+            const indx = monkey.apply_rule(w);
+            try monkeys[indx].worry_levels.append(w);
+            monkey.counter += 1;
+        }
+    }
+}
+
+// pub fn print_monkeys(monkeys: []const Monkey) void {
+//     for (monkeys, 0..) |monkey, i| {
+//         std.debug.print("Monkey {}: {any}\n", .{ i, monkey.worry_levels.items });
+//     }
+// }
+
 pub fn main() !void {
     if (std.os.argv.len != 2) {
         return error.InvalidArgument;
@@ -95,7 +117,7 @@ pub fn main() !void {
 
     var cntr: u8 = 0;
     var monkey = Monkey{ .allocator = allocator };
-    var monkeys = std.array_list.Managed(Monkey).init(allocator);
+    var monkey_list = std.array_list.Managed(Monkey).init(allocator);
     while (try reader.interface.takeDelimiter('\n')) |line| {
         if (line.len == 0) {
             cntr = 0;
@@ -103,6 +125,18 @@ pub fn main() !void {
         }
         try monkey.parse_line(cntr, line);
         cntr += 1;
-        if (cntr == 5) try monkeys.append(monkey);
+        if (cntr == 6) try monkey_list.append(monkey);
     }
+
+    const monkeys: []Monkey = try monkey_list.toOwnedSlice();
+    for (0..20) |_| {
+        try next_round(monkeys, true);
+    }
+    var n_inspected: []u32 = try allocator.alloc(u32, monkeys.len);
+    for (monkeys, 0..) |m, i| {
+        n_inspected[i] = m.counter;
+    }
+
+    std.mem.sort(u32, n_inspected, {}, std.sort.desc(u32));
+    std.debug.print("Part 1: {}", .{n_inspected[0] * n_inspected[1]});
 }
