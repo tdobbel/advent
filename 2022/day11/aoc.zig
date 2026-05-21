@@ -27,7 +27,6 @@ pub fn parse_last_number(line: []const u8) u32 {
 }
 
 const Monkey = struct {
-    allocator: std.mem.Allocator,
     worry_levels: std.array_list.Managed(u32) = undefined,
     divider: u32 = undefined,
     monkey_true: usize = undefined,
@@ -47,11 +46,11 @@ const Monkey = struct {
         self.operation = MonkeyOperation{ .operator = op, .rhs = rhs };
     }
 
-    pub fn parse_worry_levels(self: *Monkey, line: []const u8) !void {
+    pub fn parse_worry_levels(self: *Monkey, allocator: std.mem.Allocator, line: []const u8) !void {
         var i: usize = 0;
         while (line[i] != ':') : (i += 1) {}
         const nums: []const u8 = line[(i + 2)..];
-        self.worry_levels = std.array_list.Managed(u32).init(self.allocator);
+        self.worry_levels = std.array_list.Managed(u32).init(allocator);
         var split_iter = std.mem.splitSequence(u8, nums, ", ");
         while (split_iter.next()) |item| {
             const v = try std.fmt.parseInt(u32, item, 10);
@@ -59,10 +58,19 @@ const Monkey = struct {
         }
     }
 
-    pub fn parse_line(self: *Monkey, flag: u8, line: []const u8) !void {
+    pub fn clone(self: *const Monkey, allocator: std.mem.Allocator) !Monkey {
+        var monkey: Monkey = Monkey{ .divider = self.divider, .monkey_true = self.monkey_true, .monkey_false = self.monkey_false, .operation = self.operation, .counter = 0 };
+        monkey.worry_levels = std.array_list.Managed(u32).init(allocator);
+        for (self.worry_levels.items) |item| {
+            try monkey.worry_levels.append(item);
+        }
+        return monkey;
+    }
+
+    pub fn parse_line(self: *Monkey, allocator: std.mem.Allocator, flag: u8, line: []const u8) !void {
         try switch (flag) {
             0 => return,
-            1 => self.parse_worry_levels(line),
+            1 => self.parse_worry_levels(allocator, line),
             2 => self.parse_operator(line),
             3 => {
                 self.divider = parse_last_number(line);
@@ -93,11 +101,22 @@ pub fn next_round(monkeys: []Monkey, divide_by_three: bool) !void {
     }
 }
 
-// pub fn print_monkeys(monkeys: []const Monkey) void {
-//     for (monkeys, 0..) |monkey, i| {
-//         std.debug.print("Monkey {}: {any}\n", .{ i, monkey.worry_levels.items });
-//     }
-// }
+pub fn monkey_business(allocator: std.mem.Allocator, monkeys: []const Monkey) !u32 {
+    var n_inspected: []u32 = try allocator.alloc(u32, monkeys.len);
+    for (monkeys, 0..) |m, i| {
+        n_inspected[i] = m.counter;
+    }
+    std.mem.sort(u32, n_inspected, {}, std.sort.desc(u32));
+    const v: u32 = n_inspected[0] * n_inspected[1];
+    allocator.free(n_inspected);
+    return v;
+}
+
+pub fn print_monkeys(monkeys: []const Monkey) void {
+    for (monkeys, 0..) |monkey, i| {
+        std.debug.print("Monkey {}: {any}\n", .{ i, monkey.worry_levels.items });
+    }
+}
 
 pub fn main() !void {
     if (std.os.argv.len != 2) {
@@ -116,27 +135,32 @@ pub fn main() !void {
     const allocator = arena.allocator();
 
     var cntr: u8 = 0;
-    var monkey = Monkey{ .allocator = allocator };
+    var monkey = Monkey{};
     var monkey_list = std.array_list.Managed(Monkey).init(allocator);
     while (try reader.interface.takeDelimiter('\n')) |line| {
         if (line.len == 0) {
             cntr = 0;
             continue;
         }
-        try monkey.parse_line(cntr, line);
+        try monkey.parse_line(allocator, cntr, line);
         cntr += 1;
         if (cntr == 6) try monkey_list.append(monkey);
     }
 
     const monkeys: []Monkey = try monkey_list.toOwnedSlice();
+    var monkeys2 = try allocator.alloc(Monkey, monkeys.len);
+    for (monkeys, 0..) |m, i| {
+        monkeys2[i] = try m.clone(allocator);
+    }
     for (0..20) |_| {
         try next_round(monkeys, true);
     }
-    var n_inspected: []u32 = try allocator.alloc(u32, monkeys.len);
-    for (monkeys, 0..) |m, i| {
-        n_inspected[i] = m.counter;
+
+    std.debug.print("Part 1: {}", .{try monkey_business(allocator, monkeys)});
+
+    for (0..20) |_| {
+        try next_round(monkeys2, false);
     }
 
-    std.mem.sort(u32, n_inspected, {}, std.sort.desc(u32));
-    std.debug.print("Part 1: {}", .{n_inspected[0] * n_inspected[1]});
+    std.debug.print("Part 2: {}", .{try monkey_business(allocator, monkeys2)});
 }
