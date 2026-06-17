@@ -20,17 +20,21 @@ pub fn max_joltage(bank: []u8, n_battery: usize, joltage: u64) u64 {
     return max_joltage(bank[imax + 1 ..], n_battery - 1, new_joltage);
 }
 
-pub fn main() !void {
-    if (std.os.argv.len != 2) {
-        return error.InvalidArgument;
+pub fn main(init: std.process.Init) !void {
+    const alloc = init.arena.allocator();
+    const args = try init.minimal.args.toSlice(alloc);
+    if (args.len != 2) {
+        return error.MissingInputFile;
     }
-    const cwd = std.fs.cwd();
-    const file_name: [:0]const u8 = std.mem.span(std.os.argv[1]);
-    const file = try cwd.openFile(file_name, .{});
-    defer file.close();
+
+    const io = init.io;
+    const file = try std.Io.Dir.cwd().openFile(io, args[1], .{
+        .mode = .read_only,
+    });
+    defer file.close(io);
 
     var buffer: [128]u8 = undefined;
-    var reader = file.reader(&buffer);
+    var reader = file.reader(io, &buffer);
 
     var part1: u64 = 0;
     var part2: u64 = 0;
