@@ -17,14 +17,17 @@ u64 argmax(string8 s) {
   return imax;
 }
 
-u64 max_value(string8 s, u64 count, u64 acc) {
-  if (count == 0)
-    return acc;
-  u64 imax = argmax((string8){.str = s.str, .size = s.size - count + 1});
-  u64 v = acc * 10 + (u64)(s.str[imax] - '0');
-  return max_value(
-      (string8){.str = s.str + imax + 1, .size = s.size - imax - 1}, count - 1,
-      v);
+u64 max_value(string8 s, u64 count) {
+  u64 v = 0;
+  string8 slice = s;
+  for (u64 i = count; i > 0; --i) {
+    u64 imax =
+        argmax((string8){.str = slice.str, .size = slice.size - i + 1});
+    v = v * 10 + (u64)(slice.str[imax] - '0');
+    slice =
+        (string8){.str = slice.str + imax + 1, .size = slice.size - imax - 1};
+  }
+  return v;
 }
 
 int main(int argc, char *argv[]) {
@@ -43,8 +46,8 @@ int main(int argc, char *argv[]) {
   while (fgets(buffer, 1024, fp)) {
     u64 n = strcspn(buffer, "\n");
     string8 s = (string8){.str = (u8 *)buffer, .size = n};
-    part1 += max_value(s, 2, 0);
-    part2 += max_value(s, 12, 0);
+    part1 += max_value(s, 2);
+    part2 += max_value(s, 12);
   }
   fclose(fp);
 
