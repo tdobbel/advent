@@ -2,6 +2,10 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+#define VECTOR_IMPLEMENTATION
+#include "vector.h"
+
 #define ARENA_IMPLEMENTATION
 #include "arena.h"
 
@@ -59,7 +63,7 @@ void count_basin(grid_info grid, u64 x, u64 y, b8 *visited, u64 *size) {
   }
 }
 
-u64 solve(grid_info grid, b8 *visited, arena_vector *basins) {
+u64 solve(grid_info grid, b8 *visited, vector *basins) {
   u64 total = 0;
   u64 xn, yn, size;
   for (u64 y = 0; y < grid.ny; ++y) {
@@ -78,7 +82,7 @@ u64 solve(grid_info grid, b8 *visited, arena_vector *basins) {
         memset(visited, false, grid.nx * grid.ny);
         size = 0;
         count_basin(grid, x, y, visited, &size);
-        AVEC_PUSH(basins, u64, size);
+        VEC_PUSH(basins, u64, size);
       }
     }
   }
@@ -97,7 +101,7 @@ int main(int argc, char *argv[]) {
   }
 
   mem_arena *perm_arena = arena_create(KiB(100));
-  arena_vector *vec = AVEC_CREATE(perm_arena, u8, 512);
+  vector *vec = VEC_ARENA_CREATE(perm_arena, u8);
 
   char buffer[BUFSIZE];
   u64 ny = 0;
@@ -106,20 +110,20 @@ int main(int argc, char *argv[]) {
   while (fgets(buffer, BUFSIZE, fp)) {
     nx = strcspn(buffer, "\n");
     for (u64 i = 0; i < nx; ++i) {
-      AVEC_PUSH(vec, u8, buffer[i] - '0');
+      VEC_PUSH(vec, u8, buffer[i] - '0');
     }
     ny++;
   }
   fclose(fp);
 
-  grid_info grid = (grid_info){.nx = nx, .ny = ny, AVEC_FLATTEN(vec, u8)};
-  b8 *visited = PUSH_ARRAY(perm_arena, b8, nx * ny);
-  arena_vector *basins_vec = AVEC_CREATE(perm_arena, u64, 512);
+  grid_info grid = (grid_info){.nx = nx, .ny = ny, .data=(u8*)vec->data};
+  b8 *visited = ALLOC_ARRAY(perm_arena, b8, nx * ny);
+  vector *basins_vec = VEC_ARENA_CREATE(perm_arena, u64);
 
   u64 part1 = solve(grid, visited, basins_vec);
   printf("Part 1: %lu\n", part1);
 
-  u64 *basins = AVEC_FLATTEN(basins_vec, u64);
+  u64 *basins = (u64 *)basins_vec->data;
   qsort(basins, basins_vec->size, sizeof(u64), cmp);
   u64 part2 = 1;
   for (u64 i = 0; i < 3; ++i) {
