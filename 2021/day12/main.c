@@ -1,3 +1,4 @@
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -76,13 +77,39 @@ u64 count_paths(hash_map *cave_map, string8 start, string8 end) {
   return total;
 }
 
+u64 solve_part2(hash_map *cave_map, string8 start, string8 end, string8 current,
+                b8 allow_twice) {
+  // Must exit on end
+  if (str_equal(current, end))
+    return 1;
+  cave_node *cave = HM_GET(cave_node *, cave_map, &current);
+  // Can go through start only once
+  if (str_equal(current, start) && cave->cntr > 0)
+    return 0;
+  b8 allow_twice_after = allow_twice;
+  if (cave->small && cave->cntr > 0) {
+    if (allow_twice)
+      allow_twice_after = false;
+    else
+      return 0;
+  }
+  u64 total = 0;
+  cave->cntr++;
+  string8 *neighbors = (string8 *)cave->conns->data;
+  for (u64 i = 0; i < cave->conns->size; ++i) {
+    total += solve_part2(cave_map, start, end, neighbors[i], allow_twice_after);
+  }
+  cave->cntr--;
+  return total;
+}
+
 int main(int argc, char *argv[]) {
   if (argc < 2) {
     fprintf(stderr, "Missing input file\n");
     return EXIT_FAILURE;
   }
   string8 file = {0};
-  mem_arena *perm_arena = arena_create(MiB(10));
+  mem_arena *perm_arena = arena_create(KiB(50));
   str_read_file(perm_arena, &file, argv[1]);
 
   hash_map *cave_map = STRING_HASHMAP_ARENA(perm_arena, cave_node *);
@@ -93,6 +120,9 @@ int main(int argc, char *argv[]) {
   string8 end = STR8_LIT("end");
   u64 part1 = count_paths(cave_map, start, end);
   printf("Part 1: %lu\n", part1);
+
+  u64 part2 = solve_part2(cave_map, start, end, start, true);
+  printf("Part 2: %lu\n", part2);
 
   arena_destroy(perm_arena);
   return EXIT_SUCCESS;
