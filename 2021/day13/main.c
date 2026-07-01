@@ -1,3 +1,4 @@
+#include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -29,6 +30,61 @@ void plot_paper(folded_paper *paper) {
     }
     printf("\n");
   }
+  printf("\n");
+}
+
+void fold_x(folded_paper *paper, u64 x_fold) {
+  assert(x_fold == paper->nx / 2);
+  u64 *keys = (u64 *)hm_keys(paper->dots);
+  u64 pos[2], dx;
+  u8 dummy = 1;
+  u64 n = paper->dots->size;
+  hm_reset(paper->dots);
+  for (u64 i = 0; i < n; ++i) {
+    pos[0] = keys[2 * i + 0];
+    pos[1] = keys[2 * i + 1];
+    if (pos[0] > x_fold) {
+      dx = pos[0] - x_fold;
+      pos[0] = x_fold - dx;
+    }
+    hm_put(paper->dots, &pos, &dummy);
+  }
+  free(keys);
+  paper->nx = x_fold;
+}
+
+void fold_y(folded_paper *paper, u64 y_fold) {
+  assert(y_fold == paper->ny / 2);
+  u64 *keys = (u64 *)hm_keys(paper->dots);
+  u64 pos[2], dy;
+  u8 dummy = 1;
+  u64 n = paper->dots->size;
+  hm_reset(paper->dots);
+  for (u64 i = 0; i < n; ++i) {
+    pos[0] = keys[2 * i + 0];
+    pos[1] = keys[2 * i + 1];
+    if (pos[1] > y_fold) {
+      dy = pos[1] - y_fold;
+      pos[1] = y_fold - dy;
+    }
+    hm_put(paper->dots, &pos, &dummy);
+  }
+  free(keys);
+  paper->ny = y_fold;
+}
+
+void fold_paper(folded_paper *paper, vector *word_vec,
+                string8 fold_instruction) {
+  string8 splitted[2] = {0};
+  u64 ax_pos;
+  split_whitespace(word_vec, fold_instruction);
+  string8 last_word = *(string8 *)vector_get_last(word_vec);
+  str_split_once(splitted, last_word, STR8_LIT("="));
+  str_parse_unsigned(&ax_pos, splitted[1]);
+  if (str_equal(splitted[0], STR8_LIT("x")))
+    fold_x(paper, ax_pos);
+  else
+    fold_y(paper, ax_pos);
 }
 
 int main(int argc, char *argv[]) {
@@ -60,11 +116,20 @@ int main(int argc, char *argv[]) {
     hm_put(hm, &pos, &dummy);
   }
   folded_paper paper = (folded_paper){.nx = nx, .ny = ny, .dots = hm};
+
+  vector *word_vec = VEC_CREATE(string8);
+  fold_paper(&paper, word_vec, lines[++iln]);
+
+  printf("Part 1: %lu\n", hm->size);
+  for (iln = iln + 1; iln < line_vec->size; ++iln) {
+    fold_paper(&paper, word_vec, lines[iln]);
+  }
   plot_paper(&paper);
 
-  free(file.str);
+  vector_free(word_vec);
   vector_free(line_vec);
   hm_deinit(hm);
+  free(file.str);
 
   return EXIT_SUCCESS;
 }
