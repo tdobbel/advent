@@ -153,11 +153,8 @@ string8 find_max_clique(mem_arena *arena, hash_map *adj, vector *name_vec) {
     for (u32 i = next; i < name_vec->size; ++i) {
       b8 add = 1;
       vector *vn = HM_GET(vector *, adj, &nodes[i]);
-      for (u32 j = prev; j < next; ++j) {
-        if (!vector_contains(vn, &nodes[j], u32_eql_fun)) {
-          add = 0;
-          break;
-        }
+      for (u32 j = prev; j < next && add; ++j) {
+        add = vector_contains(vn, &nodes[j], u32_eql_fun);
       }
       if (!add)
         continue;
