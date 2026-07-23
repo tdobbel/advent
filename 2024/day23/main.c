@@ -118,19 +118,17 @@ u32 count_triangles(hash_map *adj, string8 *names) {
       continue;
     vector *vec0 = *(vector **)kvi.value_ptr;
     u32 *neigh0 = (u32 *)vec0->data;
-    for (u32 i = 0; i < vec0->size; ++i) {
+    for (u32 i = 0; i < vec0->size - 1; ++i) {
       u32 node1 = neigh0[i];
       vector *vec1 = HM_GET(vector *, adj, &node1);
-      u32 *neigh1 = (u32 *)vec1->data;
-      for (u32 j = 0; j < vec1->size; ++j) {
-        u32 node2 = neigh1[j];
-        vector *vec2 = HM_GET(vector *, adj, &node2);
-        if (vector_contains(vec2, &node0, u32_eql_fun)) {
-          u32 nodes[3] = {node0, node1, node2};
-          qsort(nodes, 3, sizeof(u32), cmp_fn);
-          triplet tri = (triplet){.a = nodes[0], .b = nodes[1], .c = nodes[2]};
-          hm_put(tris, &tri, &dummy);
-        }
+      for (u32 j = i + 1; j < vec0->size; ++j) {
+        u32 node2 = neigh0[j];
+        if (!vector_contains(vec1, &node2, u32_eql_fun))
+          continue;
+        u32 nodes[3] = {node0, node1, node2};
+        qsort(nodes, 3, sizeof(u32), cmp_fn);
+        triplet tri = (triplet){.a = nodes[0], .b = nodes[1], .c = nodes[2]};
+        hm_put(tris, &tri, &dummy);
       }
     }
   }
