@@ -86,6 +86,8 @@ u64 apply_operation(op_t op, u64 a, u64 b) {
 b8 ispossible(u64 *nums, u64 n_num, u64 target, u32 nop, u64 value) {
   if (n_num == 0)
     return target == value;
+  if (value > target)
+    return 0;
   for (u32 op = 0; op < nop; ++op) {
     u64 vnext = apply_operation(op, value, nums[0]);
     if (ispossible(nums + 1, n_num - 1, target, nop, vnext))
