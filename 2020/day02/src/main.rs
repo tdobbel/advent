@@ -1,18 +1,17 @@
 use anyhow::Result;
 use regex::Regex;
-use std::collections::HashMap;
 use std::env;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 
 pub fn valid_password(letter: char, min_count: usize, max_count: usize, password: &str) -> bool {
-    let mut counter: HashMap<char, usize> = HashMap::new();
+    let mut cntr: usize = 0;
     for c in password.chars() {
-        let cnt = counter.entry(c).or_insert(0);
-        *cnt += 1;
+        if c == letter {
+            cntr += 1;
+        }
     }
-    let cnt = counter.entry(letter).or_insert(0);
-    *cnt >= min_count && *cnt <= max_count
+    cntr >= min_count && cntr <= max_count
 }
 
 pub fn valid_password2(letter: char, index1: usize, index2: usize, password: &str) -> bool {
