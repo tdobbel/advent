@@ -1,67 +1,29 @@
-#include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
 
-#define BUFFER_SIZE 128
+#define STRING_IMPLEMENTATION
+#include "string8.h"
 
-struct Node {
-  char word[BUFFER_SIZE];
-  int counter[26];
-  struct Node *next;
-};
+#define VECTOR_IMPLEMENTATION
+#include "vector.h"
+
+#define N_LETTER 26
 
 typedef struct {
-  int size;
-  struct Node *head;
-  struct Node *end;
-} LinkedList;
+  string8 word;
+  u8 counter[N_LETTER];
+} c_word;
 
-LinkedList *create_list() {
-  LinkedList *ll = malloc(sizeof(LinkedList));
-  ll->size = 0;
-  ll->head = NULL;
-  ll->end = NULL;
-  return ll;
-}
-
-void append(LinkedList *ll, char *name, int size, int counter[26]) {
-  struct Node *node = malloc(sizeof(struct Node));
-  memcpy(node->counter, counter, 26 * sizeof(int));
-  memcpy(node->word, name, size);
-  node->word[size] = '\0';
-  node->next = NULL;
-  if (ll->head == NULL) {
-    ll->head = node;
-    ll->end = node;
-  } else {
-    struct Node *prev = ll->end;
-    prev->next = node;
-    ll->end = node;
-  }
-  ll->size++;
-}
-
-void free_list(LinkedList *ll) {
-  struct Node *node = ll->head;
-  while (node) {
-    struct Node *next = node->next;
-    free(node);
-    node = next;
-  }
-  free(ll);
-}
-
-void count_letters(char *word, int size, int *counter) {
-  for (int i = 0; i < size; ++i) {
-    char c = tolower(word[i]);
+void count_letters(string8 word, u8 *counter) {
+  for (u64 i = 0; i < word.size; ++i) {
+    char c = tolower(word.str[i]);
     if (c < 'a' || c > 'z')
       continue;
     counter[c - 'a']++;
   }
 }
 
-int ispossible(int *ref, int *counter) {
+b8 ispossible(u8 *ref, u8 *counter) {
   for (int i = 0; i < 26; ++i) {
     if (counter[i] > ref[i])
       return 0;
@@ -69,7 +31,7 @@ int ispossible(int *ref, int *counter) {
   return 1;
 }
 
-int matches(int *c1, int *c2) {
+b8 matches(u8 *c1, u8 *c2) {
   for (int i = 0; i < 26; ++i) {
     if (c1[i] != c2[i])
       return 0;
@@ -78,44 +40,43 @@ int matches(int *c1, int *c2) {
 }
 
 int main() {
-  char buffer[BUFFER_SIZE];
-  char *puzzle = "cryestmotolsns";
-  int refcount[26] = {0};
-  count_letters(puzzle, 14, refcount);
+  string8 puzzle = STR8_LIT("cryestmotolsns");
+  u8 refcount[26] = {0};
+  count_letters(puzzle, refcount);
 
-  FILE *fp = fopen("/usr/share/dict/words", "r");
-  if (fp == NULL) {
-    fprintf(stderr, "Could not open dictionary file");
-    return EXIT_FAILURE;
-  }
-  LinkedList *ll = create_list();
-  while (fgets(buffer, BUFFER_SIZE, fp)) {
-    int size = strcspn(buffer, "\n");
-    int counter[26] = {0};
-    count_letters(buffer, size, counter);
-    if (ispossible(refcount, counter)) {
-      append(ll, buffer, size, counter);
-    }
-  }
-  fclose(fp);
+  string8 file = {0};
+  str_read_file(NULL, &file, "/usr/share/dict/words");
 
-  struct Node *node1 = ll->head;
-  int new_ref[26];
-  while (node1 != ll->end) {
-    for (int i = 0; i < 26; ++i) {
-      new_ref[i] = refcount[i] - node1->counter[i];
-    }
-    struct Node *node2 = node1->next;
-    while (node2) {
-      if (matches(new_ref, node2->counter)) {
-        printf("%s %s\n", node1->word, node2->word);
-      }
-      node2 = node2->next;
-    }
-    node1 = node1->next;
+  vector *line_vec = VEC_CREATE(string8);
+  str_split(line_vec, file, STR8_LIT("\n"));
+  string8 *lines = (string8 *)line_vec->data;
+
+  vector *candidates = VEC_CREATE(c_word);
+
+  for (u64 i = 0; i < line_vec->size && lines[i].size > 0; ++i) {
+    c_word candidate = (c_word){.word = lines[i], .counter = {0}};
+    count_letters(candidate.word, candidate.counter);
+    if (ispossible(refcount, candidate.counter))
+      VEC_PUSH(candidates, c_word, candidate);
   }
 
-  free_list(ll);
+  c_word *words = (c_word *)candidates->data;
+
+  for (u64 i = 0; i < candidates->size - 1; ++i) {
+    u8 new_ref[N_LETTER] = {0};
+    for (u64 k = 0; k < N_LETTER; ++k) {
+      new_ref[k] = refcount[k] - words[i].counter[k];
+    }
+    for (u64 j = i + 1; j < candidates->size; ++j) {
+      if (matches(words[j].counter, new_ref))
+        printf(STR8_FMT " " STR8_FMT "\n", STR8_UNWRAP(words[i].word),
+               STR8_UNWRAP(words[j].word));
+    }
+  }
+
+  vector_free(line_vec);
+  vector_free(candidates);
+  free(file.str);
 
   return EXIT_SUCCESS;
 }
