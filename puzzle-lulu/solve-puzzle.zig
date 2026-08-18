@@ -19,13 +19,13 @@ pub fn possible_word(ref_counter: [26]u5, word: []u8) bool {
     return true;
 }
 
-
-pub fn main() !void {
-    const file = try std.fs.cwd().openFile("/usr/share/dict/words", .{});
-    defer file.close();
+pub fn main(init: std.process.Init) !void {
+    const cwd = std.Io.Dir.cwd();
+    const file = try cwd.openFile(init.io, "/usr/share/dict/words", .{ .mode = .read_only });
+    defer file.close(init.io);
 
     var buffer: [128]u8 = undefined;
-    var reader = file.reader(&buffer);
+    var reader = file.reader(init.io, &buffer);
 
     const puzzle = "cryestmotolsns";
     const refcount = count_letters(puzzle[0..]);
@@ -49,18 +49,17 @@ pub fn main() !void {
     var new_counter: [26]u5 = undefined;
     for (0..nword - 1) |i| {
         @memcpy(&new_counter, &refcount);
-        const word1 = candidates.items[i]; 
-        const cntr1 = count_letters(word1); 
+        const word1 = candidates.items[i];
+        const cntr1 = count_letters(word1);
         for (cntr1, 0..) |n, k| {
             new_counter[k] -= n;
         }
-        for (i+1..nword) |j| {
+        for (i + 1..nword) |j| {
             const word2 = candidates.items[j];
             const cntr2 = count_letters(word2);
             if (std.mem.eql(u5, &new_counter, &cntr2)) {
-                std.debug.print("{s} {s}\n", .{word1, word2});
+                std.debug.print("{s} {s}\n", .{ word1, word2 });
             }
         }
     }
-
 }
