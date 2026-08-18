@@ -45,6 +45,11 @@ pub fn main(init: std.process.Init) !void {
             try candidates.append(word);
         }
     }
+
+    const stdout = std.Io.File.stdout();
+    var buf: [4096]u8 = undefined;
+    var writer = stdout.writer(init.io, &buf);
+
     const nword = candidates.items.len;
     var new_counter: [26]u5 = undefined;
     for (0..nword - 1) |i| {
@@ -58,8 +63,9 @@ pub fn main(init: std.process.Init) !void {
             const word2 = candidates.items[j];
             const cntr2 = count_letters(word2);
             if (std.mem.eql(u5, &new_counter, &cntr2)) {
-                std.debug.print("{s} {s}\n", .{ word1, word2 });
+                try writer.interface.print("{s} {s}\n", .{ word1, word2 });
             }
         }
+        try writer.interface.flush();
     }
 }
