@@ -28,6 +28,7 @@ const Puzzle = struct {
             parts[n] = p;
         }
         const dst = parts[n - 1];
+        if (self.state.contains(dst)) return true;
         switch (n) {
             3 => {
                 const value = self.parse_number(parts[0]) orelse return false;
@@ -93,6 +94,7 @@ pub fn main(init: std.process.Init) !void {
     defer file.close(init.io);
 
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+    defer arena.deinit();
     const allocator = arena.allocator();
 
     const stat = try file.stat(init.io);
@@ -106,9 +108,16 @@ pub fn main(init: std.process.Init) !void {
     }
     var puzzle = try Puzzle.init(allocator, lines.items);
     try puzzle.solve();
+    const part1 = puzzle.state.get("a").?;
+
+    var puzzle2 = try Puzzle.init(allocator, lines.items);
+    try puzzle2.state.put("b", part1);
+    try puzzle2.solve();
+    const part2 = puzzle2.state.get("a").?;
 
     var buf: [256]u8 = undefined;
     var writer = std.Io.File.stdout().writer(init.io, &buf);
-    try writer.interface.print("Part 1: {}\n", .{puzzle.state.get("a").?});
+    try writer.interface.print("Part 1: {}\n", .{part1});
+    try writer.interface.print("Part 2: {}\n", .{part2});
     try writer.flush();
 }
