@@ -14,6 +14,10 @@ const NameMap = struct {
         return NameMap{ .allocator = allocator, .hm = std.StringHashMap(usize).init(allocator) };
     }
 
+    pub fn deinit(self: *NameMap) void {
+        self.hm.deinit();
+    }
+
     pub fn size(self: *const NameMap) usize {
         return self.hm.count();
     }
@@ -28,9 +32,10 @@ const NameMap = struct {
     }
 };
 
-pub fn find_shortest(shortest: *u32, n_edges: usize, wtot: u32, edges: []const Edge, counter: []u8) void {
+pub fn find_shortest_longest(shortest: *u32, longest: *u32, n_edges: usize, wtot: u32, edges: []const Edge, counter: []u8) void {
     if (n_edges == counter.len - 1) {
         shortest.* = @min(shortest.*, wtot);
+        longest.* = @max(longest.*, wtot);
         return;
     }
     if (edges.len == 0) return;
@@ -38,11 +43,11 @@ pub fn find_shortest(shortest: *u32, n_edges: usize, wtot: u32, edges: []const E
     if (counter[edge.a] < 2 and counter[edge.b] < 2) {
         counter[edge.a] += 1;
         counter[edge.b] += 1;
-        find_shortest(shortest, n_edges + 1, wtot + edge.weight, edges[1..], counter);
+        find_shortest_longest(shortest, longest, n_edges + 1, wtot + edge.weight, edges[1..], counter);
         counter[edge.a] -= 1;
         counter[edge.b] -= 1;
     }
-    find_shortest(shortest, n_edges, wtot, edges[1..], counter);
+    find_shortest_longest(shortest, longest, n_edges, wtot, edges[1..], counter);
 }
 
 pub fn main(init: std.process.Init) !void {
@@ -59,7 +64,9 @@ pub fn main(init: std.process.Init) !void {
     var reader = file.reader(init.io, &buf);
 
     var name_map = NameMap.init(allocator);
+    defer name_map.deinit();
     var edges: std.ArrayList(Edge) = .empty;
+    defer edges.deinit(allocator);
 
     var parts: [5][]const u8 = undefined;
     var vmax: u32 = 0;
@@ -79,10 +86,10 @@ pub fn main(init: std.process.Init) !void {
     const counter = try allocator.alloc(u8, name_map.size());
     @memset(counter, 0);
     var part1 = vmax;
-    find_shortest(&part1, 0, 0, edges.items, counter);
+    var part2: u32 = 0;
+    find_shortest_longest(&part1, &part2, 0, 0, edges.items, counter);
 
     var writer = std.Io.File.stdout().writer(init.io, &buf);
-    try writer.interface.print("Part 1: {}\n", .{part1});
+    try writer.interface.print("Part 1: {}\nPart 2: {}\n", .{part1, part2});
     try writer.flush();
-
 }
