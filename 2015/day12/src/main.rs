@@ -3,17 +3,17 @@ use serde_json::Value;
 use std::{env, fs};
 
 fn count_total(obj: &Value, total: &mut i64, ignore_red: bool) {
-    match &obj {
-        &Value::Array(v) => {
+    match obj {
+        Value::Array(v) => {
             for item in v.iter() {
                 count_total(item, total, ignore_red);
             }
         }
-        &Value::Number(n) => {
+        Value::Number(n) => {
             *total += n.as_i64().unwrap();
         }
-        &Value::String(_) => {}
-        &Value::Object(map) => {
+        Value::String(_) => {}
+        Value::Object(map) => {
             if ignore_red {
                 for v in map.values() {
                     if let Value::String(s) = v
