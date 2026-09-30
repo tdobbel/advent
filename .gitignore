@@ -3,3 +3,12 @@ example
 target
 *.lock
 main
+*.txt
+aoc
+Makefile
+.clangd
+zig-out
+.zig-cache
+example*
+*test*
+PRINT
