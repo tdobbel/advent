@@ -6,6 +6,8 @@ const Item = struct {
     armor: u32,
 };
 
+const the_boss = Character{ .health = 109, .damage = 8, .armor = 2 };
+
 const weapons: [5]Item = [_]Item{
     Item{ .cost = 8, .damage = 4, .armor = 0 },
     Item{ .cost = 10, .damage = 5, .armor = 0 },
@@ -62,6 +64,7 @@ pub fn solve_puzzle(boss: Character) [2]u32 {
             const base_cost = weapon.cost + armor.cost;
             const base_player = Character{ .health = 100, .armor = armor.armor, .damage = weapon.damage };
             if (base_player.wins_against(boss)) {
+                // No need to buy a ring
                 min_gold = @min(min_gold, base_cost);
                 continue;
             } else {
@@ -102,9 +105,10 @@ pub fn solve_puzzle(boss: Character) [2]u32 {
     return .{ min_gold, max_gold };
 }
 
-pub fn main() !void {
-    const boss = Character{ .health = 109, .damage = 8, .armor = 2 };
-    const sol = solve_puzzle(boss);
-    std.debug.print("Part 1: {}\n", .{sol[0]});
-    std.debug.print("Part 2: {}\n", .{sol[1]});
+pub fn main(init: std.process.Init) !void {
+    const sol = solve_puzzle(the_boss);
+    var buf: [256]u8 = undefined;
+    var writer = std.Io.File.stdout().writer(init.io, &buf);
+    try writer.interface.print("Part 1: {}\nPart 2: {}\n", .{ sol[0], sol[1] });
+    try writer.flush();
 }
