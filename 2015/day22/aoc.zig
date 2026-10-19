@@ -119,8 +119,8 @@ pub fn main() void {
 pub fn solve_part1(min_mana: *u32, spent: u32, player_: Player, boss_: Boss, player_turn: bool) void {
     var player = player_;
     var boss = boss_;
-    player.decrement_timers();
     player.apply_spells(&boss);
+    player.decrement_timers();
     if (!player_turn) {
         boss.attack(&player);
         if (player.is_dead()) return;
