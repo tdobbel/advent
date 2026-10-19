@@ -105,10 +105,6 @@ const Boss = struct {
     pub fn is_dead(self: *const Boss) bool {
         return self.hp == 0;
     }
-
-    pub fn clone(self: *const Boss) Boss {
-        return Boss{ .hp = self.hp, .damage = self.damage };
-    }
 };
 
 pub fn main(init: std.process.Init) !void {
