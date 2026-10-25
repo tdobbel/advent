@@ -13,13 +13,10 @@ pub fn compute_qe(weights: []const u32, grp: Group) u64 {
     return qe;
 }
 
-pub fn group_less_than(_: void, grpA: Group, grpB: Group) bool {
-    return grpA.size < grpB.size;
-}
-
 pub fn get_all_groups(
     gpa: std.mem.Allocator,
     found: *std.ArrayList(Group),
+    min_size: *u32,
     weights: []const u32,
     target: u32,
     grp: Group,
@@ -27,17 +24,35 @@ pub fn get_all_groups(
 ) !void {
     if (idx == weights.len) {
         if (grp.total == target) {
+            min_size.* = @min(min_size.*, grp.size);
             try found.append(gpa, grp);
         }
         return;
     }
-    try get_all_groups(gpa, found, weights, target, grp, idx + 1);
+    try get_all_groups(gpa, found, min_size, weights, target, grp, idx + 1);
     const new_total = grp.total + weights[idx];
-    if (new_total <= target) {
+    if (new_total <= target and grp.size < min_size.*) {
         const new_word = grp.word | (@as(u32, @intCast(1)) << @as(u5, @intCast(idx)));
         const new_grp = Group{ .total = new_total, .size = grp.size + 1, .word = new_word };
-        try get_all_groups(gpa, found, weights, target, new_grp, idx + 1);
+        try get_all_groups(gpa, found, min_size, weights, target, new_grp, idx + 1);
     }
+}
+
+pub fn find_best_arrangement(gpa: std.mem.Allocator, weights: []const u32, target: u32) !u64 {
+    var found: std.ArrayList(Group) = .empty;
+    defer found.deinit(gpa);
+    const empty_grp = Group{ .word = 0, .size = 0, .total = 0 };
+    var min_size: u32 = @intCast(weights.len);
+    try get_all_groups(gpa, &found, &min_size, weights, target, empty_grp, 0);
+
+    const groups = found.items;
+
+    var min_qe: u64 = compute_qe(weights, groups[0]);
+    for (groups) |grp| {
+        if (grp.size > min_size) continue;
+        min_qe = @min(min_qe, compute_qe(weights, grp));
+    }
+    return min_qe;
 }
 
 pub fn main(init: std.process.Init) !void {
@@ -64,27 +79,15 @@ pub fn main(init: std.process.Init) !void {
         try weights_vec.append(gpa, weight);
     }
 
+    var writer = std.Io.File.stdout().writer(init.io, &buf);
+
     const weights = weights_vec.items;
-    var found: std.ArrayList(Group) = .empty;
-    const grp = Group{ .word = 0, .size = 0, .total = 0 };
-    try get_all_groups(gpa, &found, weights, wtot / 3, grp, 0);
 
-    const groups = found.items;
-    std.mem.sort(Group, groups, {}, group_less_than);
+    const part1 = try find_best_arrangement(gpa, weights, wtot / 3);
+    try writer.interface.print("Part 1: {}\n", .{part1});
 
-    const min_size: u32 = groups[0].size;
-    var part1: u64 = compute_qe(weights, groups[0]);
-    var idx: usize = 1;
-    while (groups[idx].size == min_size) : (idx += 1) {
-        part1 =  @min(part1, compute_qe(weights, groups[idx]));
+    const part2 = try find_best_arrangement(gpa, weights, wtot / 4);
+    try writer.interface.print("Part 2: {}\n", .{part2});
 
-    }
-
-    // const partition = try gpa.alloc(u8, weights.len);
-    // @memset(partition, 0);
-    // var part1: u32 = 1 << 31;
-    // var min_size: u32 = @intCast(weights.len);
-    // solve_part1(&part1, &min_size, partition, 0, weights, wtot / 3, 0, 0);
-
-    std.debug.print("Part 1: {}\n", .{part1});
+    try writer.interface.flush();
 }
