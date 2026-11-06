@@ -21,10 +21,13 @@ typedef struct {
   Direction heading;
 } BeamState;
 
+#define MAX(a, b) ((a) > (b) ? (a) : (b))
+
 void contraption_init(Contraption *contraption, string8 *lines, u64 ny);
 void propagate_beam(Contraption *contraption, BeamState bs, hash_map *visited);
 b8 beam_next(BeamState *next_state, Contraption *contraption, BeamState bs,
              Direction d);
+u32 count_visited(Contraption *contraption, hash_map *visited, b8 **touched);
 
 int main(int argc, char *argv[]) {
   if (argc < 2) {
@@ -42,6 +45,61 @@ int main(int argc, char *argv[]) {
   Contraption contraption = {0};
   contraption_init(&contraption, lines, line_vec->size);
 
+  hash_map *visited = AUTO_HASHMAP(BeamState, u8);
+  BeamState start = (BeamState){.x = 0, .y = 0, .heading = Right};
+  propagate_beam(&contraption, start, visited);
+
+  b8 *touched = NULL;
+  u32 part1 = count_visited(&contraption, visited, &touched);
+
+  printf("Part 1: %u\n", part1);
+
+  // Part 2
+  u32 part2 = 0;
+  u32 total;
+  for (u32 y = 0; y < contraption.ny; ++y) {
+    // Left
+    hm_reset(visited);
+    start.x = 0;
+    start.y = y;
+    start.heading = Right;
+    propagate_beam(&contraption, start, visited);
+    total = count_visited(&contraption, visited, &touched);
+    part2 = MAX(part2, total);
+
+    // Right
+    hm_reset(visited);
+    start.x = contraption.nx - 1;
+    start.y = y;
+    start.heading = Left;
+    propagate_beam(&contraption, start, visited);
+    total = count_visited(&contraption, visited, &touched);
+    part2 = MAX(part2, total);
+  }
+  for (u32 x = 0; x < contraption.nx; ++x) {
+    // Top
+    hm_reset(visited);
+    start.x = x;
+    start.y = 0;
+    start.heading = Down;
+    propagate_beam(&contraption, start, visited);
+    total = count_visited(&contraption, visited, &touched);
+    part2 = MAX(part2, total);
+
+    // Down
+    hm_reset(visited);
+    start.x = x;
+    start.y = contraption.ny - 1;
+    start.heading = Up;
+    propagate_beam(&contraption, start, visited);
+    total = count_visited(&contraption, visited, &touched);
+    part2 = MAX(part2, total);
+  }
+
+  printf("Part 2: %u\n", part2);
+
+  free(touched);
+  hm_deinit(visited);
   free(contraption.grid);
   vector_free(line_vec);
   free(file.str);
@@ -144,7 +202,7 @@ void propagate_beam(Contraption *contraption, BeamState bs, hash_map *visited) {
       break;
     case Left:
     case Right:
-      next_dir[0] = (bs.heading + 3) % 4;
+      next_dir[n_dir++] = (bs.heading + 3) % 4;
       break;
     }
     break;
@@ -160,4 +218,23 @@ void propagate_beam(Contraption *contraption, BeamState bs, hash_map *visited) {
       continue;
     propagate_beam(contraption, new_state, visited);
   }
+}
+
+u32 count_visited(Contraption *contraption, hash_map *visited, b8 **touched) {
+  u32 size = contraption->ny * contraption->nx;
+  if (*touched == NULL) {
+    *touched = (b8 *)malloc(size);
+  }
+  memset(*touched, 0, size);
+  kv_iterator kvi = hm_iterator(visited);
+  while (get_next(&kvi)) {
+    BeamState *bs = (BeamState *)kvi.key_ptr;
+    (*touched)[bs->y * contraption->nx + bs->x] = 1;
+  }
+  u32 total = 0;
+  for (u32 i = 0; i < size; ++i) {
+    if ((*touched)[i])
+      total++;
+  }
+  return total;
 }
