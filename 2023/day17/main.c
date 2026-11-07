@@ -29,6 +29,21 @@ typedef struct {
 
 u32 find_shortest_path(const CityMap *map, u8 min_block, u8 max_block);
 
+Order compare_fn(const void *ctx, const void *a, const void *b) {
+  CityMap *map = (CityMap *)ctx;
+  Crucible *ca = (Crucible *)a;
+  Crucible *cb = (Crucible *)b;
+  u32 scoreA =
+      ca->heat_loss + (map->nx - ca->state.x - 1) + (map->ny - ca->state.y - 1);
+  u32 scoreB =
+      cb->heat_loss + (map->nx - cb->state.x - 1) + (map->ny - cb->state.y - 1);
+  if (scoreA < scoreB)
+    return lt;
+  if (scoreA > scoreB)
+    return gt;
+  return eq;
+}
+
 int main(int argc, char *argv[]) {
   if (argc < 2) {
     fprintf(stderr, "Missing input file\n");
@@ -73,8 +88,9 @@ u32 find_shortest_path(const CityMap *map, u8 min_block, u8 max_block) {
       (CrucibleState){.x = 0, .y = 0, .heading = Right, .counter = 0};
   Crucible start = (Crucible){.state = state0, .heat_loss = 0};
 
-  vector *queue = VEC_CREATE(Crucible);
-  VEC_PUSH(queue, Crucible, start);
+  PriorityQueue *queue =
+      PRIORITY_QUEUE_CREATE(Crucible, (void *)map, compare_fn);
+  priority_queue_push(queue, &start);
 
   hash_map *visited = AUTO_HASHMAP(CrucibleState, b8);
 
@@ -82,20 +98,8 @@ u32 find_shortest_path(const CityMap *map, u8 min_block, u8 max_block) {
   Direction next_dir[3] = {0};
 
   while (queue->size > 0) {
-    u32 imin = 0;
-    u32 min_score = 0xffffffff;
-    Crucible *crucibles = (Crucible *)queue->data;
-    for (u32 i = 0; i < queue->size; ++i) {
-      Crucible c = crucibles[i];
-      u32 score =
-          c.heat_loss + (map->nx - c.state.x - 1) + (map->ny - c.state.y - 1);
-      if (score < min_score) {
-        imin = i;
-        min_score = score;
-      }
-    }
-    Crucible c = crucibles[imin];
-    vector_remove(queue, imin);
+    Crucible c = {0};
+    priority_queue_pop(queue, &c);
     if (c.state.x == map->nx - 1 && c.state.y == map->ny - 1) {
       sol = MIN(sol, c.heat_loss);
       break;
@@ -146,10 +150,10 @@ u32 find_shortest_path(const CityMap *map, u8 min_block, u8 max_block) {
               c.heat_loss +
               (u32)map->heat_loss[next_state.y * map->nx + next_state.x]};
 
-      VEC_PUSH(queue, Crucible, c_new);
+      priority_queue_push(queue, &c_new);
     }
   }
-  vector_free(queue);
+  priority_queue_deinit(queue);
   hm_deinit(visited);
 
   return sol;
