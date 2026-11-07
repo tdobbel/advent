@@ -11,4 +11,5 @@ zig-out
 .zig-cache
 example*
 *test*
+*.o
 PRINT
