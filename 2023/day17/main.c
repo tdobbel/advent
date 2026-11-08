@@ -97,9 +97,8 @@ u32 find_shortest_path(const CityMap *map, u8 min_block, u8 max_block) {
   u32 sol = 0xffffffff;
   Direction next_dir[3] = {0};
 
-  while (priority_queue_len(queue) > 0) {
-    Crucible c = {0};
-    priority_queue_pop(queue, &c);
+  Crucible c = {0};
+  while (priority_queue_pop(queue, &c)) {
     if (c.state.x == map->nx - 1 && c.state.y == map->ny - 1) {
       sol = MIN(sol, c.heat_loss);
       break;
