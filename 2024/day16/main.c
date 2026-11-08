@@ -4,19 +4,17 @@
 #include <string.h>
 
 #define STRING_IMPLEMENTATION
-#include "string8.h"
-
 #define VECTOR_IMPLEMENTATION
+
+#include "string8.h"
 #include "vector.h"
 
 #include "arena.h"
 
-typedef enum Direction direction;
-
-enum Direction { East, South, West, North };
+typedef enum { East, South, West, North } Direction;
 
 typedef struct {
-  direction heading;
+  Direction heading;
   u64 cost;
   u32 length;
   u32 *cells;
@@ -27,8 +25,18 @@ typedef struct {
   u8 **grid;
 } maze_t;
 
-void find_all_shortest(maze_t maze, vector *queue, vector *found,
+void find_all_shortest(maze_t maze, PriorityQueue *queue, vector *found,
                        u64 *min_cost);
+
+Order compare_paths(const void *ctx, const void *a, const void *b) {
+  path_t *pa = (path_t *)a;
+  path_t *pb = (path_t *)b;
+  if (pa->cost < pb->cost)
+    return lt;
+  if (pa->cost > pb->cost)
+    return gt;
+  return eq;
+}
 
 int main(int argc, char *argv[]) {
   if (argc < 2) {
@@ -41,8 +49,8 @@ int main(int argc, char *argv[]) {
   string8 file = {0};
   str_read_file(perm_arena, &file, argv[1]);
   vector *line_vec = VEC_ARENA_CREATE(perm_arena, string8);
-  split(line_vec, file, STR8_LIT("\n"));
-  string8 *lines = (string8 *)line_vec->data;
+  str_split(line_vec, file, STR8_LIT("\n"));
+  string8 *lines = (string8 *)line_vec->items;
   if (lines[line_vec->size - 1].size == 0)
     line_vec->size--;
   u64 nx = lines[0].size;
@@ -62,12 +70,13 @@ int main(int argc, char *argv[]) {
   }
 
   maze_t maze = (maze_t){.ny = ny, .nx = nx, .grid = grid};
-  vector *queue = VEC_ARENA_CREATE(perm_arena, path_t);
   u32 *cells = (u32 *)malloc(sizeof(u32));
   cells[0] = startY * maze.ny + startX;
   path_t path =
       (path_t){.heading = East, .cost = 0, .length = 1, .cells = cells};
-  VEC_PUSH(queue, path_t, path);
+
+  PriorityQueue *queue = PRIORITY_QUEUE_CREATE(path_t, NULL, compare_paths);
+  priority_queue_push(queue, &path);
 
   vector *found = VEC_ARENA_CREATE(perm_arena, path_t);
   u64 min_cost = UINTMAX_MAX;
@@ -75,7 +84,7 @@ int main(int argc, char *argv[]) {
   find_all_shortest(maze, queue, found, &min_cost);
   printf("Part 1: %lu\n", min_cost);
 
-  path_t *paths = (path_t *)found->data;
+  path_t *paths = (path_t *)found->items;
   b8 *visited = ALLOC_ARRAY(perm_arena, b8, nx * ny);
   memset(visited, 0, nx * ny);
   for (u64 i = 0; i < found->size; ++i) {
@@ -93,42 +102,35 @@ int main(int argc, char *argv[]) {
   }
   printf("Part 2: %u\n", part2);
 
+  priority_queue_deinit(queue);
   arena_destroy(perm_arena);
 
   return EXIT_SUCCESS;
 }
 
-void find_all_shortest(maze_t maze, vector *queue, vector *found,
+void find_all_shortest(maze_t maze, PriorityQueue *queue, vector *found,
                        u64 *min_cost) {
   u64 tol = 1000;
   u64 *best_score = malloc(sizeof(u64) * maze.ny * maze.nx);
   for (u32 i = 0; i < maze.nx * maze.ny; ++i) {
     best_score[i] = UINTMAX_MAX - tol;
   }
-  while (queue->size > 0) {
-    path_t *paths = (path_t *)queue->data;
-    u64 imin = 0;
-    u64 current_min = paths[0].cost;
-    for (u64 i = 0; i < queue->size; ++i) {
-      if (paths[i].cost < current_min) {
-        imin = i;
-        current_min = paths[i].cost;
-      }
-    }
-    if (current_min > *min_cost)
+  path_t p;
+  while (priority_queue_pop(queue, &p)) {
+    if (p.cost > *min_cost) {
+      free(p.cells);
       break;
-    path_t p = paths[imin];
-    vector_remove(queue, imin);
+    }
     u32 x = p.cells[p.length - 1];
     best_score[x] = MIN(best_score[x], p.cost);
     u32 y = x / maze.nx;
     x -= maze.nx * y;
     if (maze.grid[y][x] == 'E') {
       *min_cost = MIN(*min_cost, p.cost);
-      VEC_PUSH(found, path_t, p);
+      vector_push(found, &p);
       continue;
     }
-    direction dirs[3] = {(p.heading + 3) % 4, p.heading, (p.heading + 1) % 4};
+    Direction dirs[3] = {(p.heading + 3) % 4, p.heading, (p.heading + 1) % 4};
     for (u32 i = 0; i < 3; ++i) {
       u32 x_next = x;
       u32 y_next = y;
@@ -161,13 +163,14 @@ void find_all_shortest(maze_t maze, vector *queue, vector *found,
                                  .length = p.length + 1,
                                  .cost = cost,
                                  .cells = cells};
-      VEC_PUSH(queue, path_t, new_path);
+      priority_queue_push(queue, &new_path);
     }
     free(p.cells);
   }
   free(best_score);
-  path_t *paths = (path_t *)queue->data;
-  for (u64 i = 0; i < queue->size; ++i) {
+  vector *path_vec = queue->items;
+  path_t *paths = (path_t *)path_vec->items;
+  for (u64 i = 0; i < path_vec->size; ++i) {
     free(paths[i].cells);
   }
 }

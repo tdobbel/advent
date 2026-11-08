@@ -31,7 +31,7 @@ void count_total(JsonValue *js, i64 *total, b8 ignore_red) {
     break;
   case Array:
     vec = (vector *)js->value;
-    JsonValue **array = (JsonValue **)vec->data;
+    JsonValue **array = (JsonValue **)vec->items;
     for (u64 i = 0; i < vec->size; ++i) {
       count_total(array[i], total, ignore_red);
     }
