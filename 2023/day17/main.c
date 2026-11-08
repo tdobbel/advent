@@ -54,7 +54,7 @@ int main(int argc, char *argv[]) {
   str_read_file(NULL, &file, argv[1]);
   vector *line_vec = VEC_CREATE(string8);
   str_split(line_vec, str_trim(file), STR8_LIT("\n"));
-  string8 *lines = (string8 *)line_vec->data;
+  string8 *lines = (string8 *)line_vec->items;
 
   u32 ny = line_vec->size;
   u32 nx = lines[0].size;
@@ -69,7 +69,7 @@ int main(int argc, char *argv[]) {
     }
   }
 
-  vector_free(line_vec);
+  vector_deinit(line_vec);
   free(file.str);
 
   u32 part1 = find_shortest_path(&map, 1, 3);
@@ -97,7 +97,7 @@ u32 find_shortest_path(const CityMap *map, u8 min_block, u8 max_block) {
   u32 sol = 0xffffffff;
   Direction next_dir[3] = {0};
 
-  while (queue->size > 0) {
+  while (priority_queue_len(queue) > 0) {
     Crucible c = {0};
     priority_queue_pop(queue, &c);
     if (c.state.x == map->nx - 1 && c.state.y == map->ny - 1) {
