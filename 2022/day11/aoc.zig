@@ -191,13 +191,17 @@ pub fn main(init: std.process.Init) !void {
         monkeys2[i] = try m.clone();
     }
 
+    var buf: [256]u8 = undefined;
+    var writer = std.Io.File.stdout().writer(init.io, &buf);
+
     for (0..20) |_| {
         try next_round(monkeys, true);
     }
-    std.debug.print("Part 1: {}\n", .{try monkey_business(gpa, monkeys)});
+    try writer.interface.print("Part 1: {}\n", .{try monkey_business(gpa, monkeys)});
 
     for (0..10000) |_| {
         try next_round(monkeys2, false);
     }
-    std.debug.print("Part 2: {}\n", .{try monkey_business(gpa, monkeys2)});
+    try writer.interface.print("Part 2: {}\n", .{try monkey_business(gpa, monkeys2)});
+    try writer.flush();
 }
