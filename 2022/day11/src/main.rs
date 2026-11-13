@@ -139,18 +139,15 @@ fn parse_last_number(line: &str) -> Result<u64> {
 fn next_round(monkeys: &mut [Monkey], global_div: Option<u64>) {
     for i in 0..monkeys.len() {
         while let Some(old) = monkeys[i].worry_levels.pop() {
-            let (index, new_worry) = {
-                let monkey = &mut monkeys[i];
-                let mut new_worry = monkey.apply_operation(old);
-                if let Some(div) = global_div {
-                    new_worry %= div;
-                } else {
-                    new_worry /= 3;
-                }
-                let index = monkey.apply_test(new_worry);
-                monkey.counter += 1;
-                (index, new_worry)
-            };
+            let monkey = &mut monkeys[i];
+            let mut new_worry = monkey.apply_operation(old);
+            if let Some(div) = global_div {
+                new_worry %= div;
+            } else {
+                new_worry /= 3;
+            }
+            let index = monkey.apply_test(new_worry);
+            monkey.counter += 1;
             monkeys[index].worry_levels.push(new_worry);
         }
     }
