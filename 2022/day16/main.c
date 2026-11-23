@@ -24,8 +24,10 @@ typedef struct {
 
 u32 get_index(hash_map *name_map, string8 name);
 void compute_distance_matrix(u32 *out, const u8 *adj, u32 n);
-void solve_part1(u32 *max_pressure, ValveNetwork *network, b8 *touched, u32 src,
-                 u32 remaining_time, u32 total);
+void solve_part1(u32 *max_pressure, const ValveNetwork *network, b8 *touched,
+                 u32 src, u32 remaining_time, u32 total);
+void solve_part2(u32 *max_pressure, const ValveNetwork *network, b8 *touched,
+                 b8 elephant, u32 src[2], u32 remaining_time[2], u32 total);
 
 int main(int argc, char *argv[]) {
   if (argc < 2) {
@@ -85,8 +87,13 @@ int main(int argc, char *argv[]) {
   memset(touched, 0, n_valve);
   u32 part1 = 0;
   solve_part1(&part1, &network, touched, start_index, 30, 0);
+  printf("Part 1: %u\n", part1);
 
-  printf("Part1: %u\n", part1);
+  u32 src[2] = {start_index, start_index};
+  u32 remaining[2] = {26, 26};
+  u32 part2 = 0;
+  solve_part2(&part2, &network, touched, 0, src, remaining, 0);
+  printf("Part 2: %u\n", part2);
 
   arena_destroy(gpa);
 
@@ -126,8 +133,8 @@ void compute_distance_matrix(u32 *out, const u8 *adj, u32 n) {
   }
 }
 
-void solve_part1(u32 *max_pressure, ValveNetwork *network, b8 *touched, u32 src,
-                 u32 remaining_time, u32 total) {
+void solve_part1(u32 *max_pressure, const ValveNetwork *network, b8 *touched,
+                 u32 src, u32 remaining_time, u32 total) {
   if (remaining_time == 0) {
     *max_pressure = MAX(*max_pressure, total);
     return;
@@ -149,5 +156,37 @@ void solve_part1(u32 *max_pressure, ValveNetwork *network, b8 *touched, u32 src,
   }
   if (!moved) {
     solve_part1(max_pressure, network, touched, src, 0, total);
+  }
+}
+
+void solve_part2(u32 *max_pressure, const ValveNetwork *network, b8 *touched,
+                 b8 elephant, u32 src[2], u32 remaining_time[2], u32 total) {
+  if (remaining_time[0] == 0 && remaining_time[1] == 0) {
+    *max_pressure = MAX(*max_pressure, total);
+    return;
+  }
+
+  b8 moved = false;
+  for (u32 dst = 0; dst < network->n; ++dst) {
+    if (touched[dst] || network->flow_rates[dst] == 0)
+      continue;
+    u32 d = network->min_dist[src[elephant] * network->n + dst];
+    if (remaining_time[elephant] <= d)
+      continue;
+    moved = true;
+    u32 new_remaining[2] = {remaining_time[0], remaining_time[1]};
+    new_remaining[elephant] -= d + 1;
+    u32 new_total = total + new_remaining[elephant] * network->flow_rates[dst];
+    touched[dst] = true;
+    u32 new_src[2] = {src[0], src[1]};
+    new_src[elephant] = dst;
+    solve_part2(max_pressure, network, touched, !elephant, new_src,
+                new_remaining, new_total);
+    touched[dst] = false;
+  }
+  if (!moved) {
+    remaining_time[elephant] = 0;
+    solve_part2(max_pressure, network, touched, !elephant, src, remaining_time,
+                total);
   }
 }
