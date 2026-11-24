@@ -1,16 +1,16 @@
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 #define STRING_IMPLEMENTATION
 #include "string8.h"
-#define HASHMAP_IMPLEMENTATION
-#include "hash_map.h"
 
 #define WIDTH 7
+#define MEM_BUF_SIZE 64
 #define N_SHAPE 5
 #define X0 2
-#define SPAWN_HEIGHT 3
+#define SPAWN_HEIGHT 4
 #define NITER 2022
 
 #define MAX(a, b) ((a) > (b) ? (a) : (b))
@@ -18,18 +18,26 @@
 typedef enum { Right, Down, Left } Direction;
 
 typedef struct {
-  u64 width, height;
+  u32 width, height;
   b8 *mask;
 } Shape;
 
 typedef struct {
-  u64 x, y;
+  u32 x, y;
 } Position;
 
 typedef struct {
-  Position ul;
+  Position ll;
   const Shape *shape;
 } Rock;
+
+typedef struct {
+  u32 idx0;
+  u64 y0;
+  u32 n_row;
+  u32 highest; // relative to idx0
+  b8 buf[MEM_BUF_SIZE][WIDTH];
+} MemoryBuffer;
 
 Shape shapes[N_SHAPE] = {
     (Shape){.width = 4, .height = 1, .mask = (b8[4]){1, 1, 1, 1}},
@@ -39,14 +47,14 @@ Shape shapes[N_SHAPE] = {
         .mask = (b8[9]){0, 1, 0, 1, 1, 1, 0, 1, 0},
     },
     (Shape){
-        .width = 3, .height = 3, .mask = (b8[9]){0, 0, 1, 0, 0, 1, 1, 1, 1}},
+        .width = 3, .height = 3, .mask = (b8[9]){1, 1, 1, 0, 0, 1, 0, 0, 1}},
     (Shape){.width = 1, .height = 4, .mask = (b8[4]){1, 1, 1, 1}},
     (Shape){.width = 2, .height = 2, .mask = (b8[4]){1, 1, 1, 1}}};
 
-Rock rock_init(const Shape *shape, u64 top);
-b8 rock_move(Rock *rock, Direction d, hash_map *used);
-void rock_fall(Rock *rock, string8 jets, u64 *iptr, hash_map *used);
-void debug_display(const Rock *rock, hash_map *used, u64 top);
+Rock rock_init(const Shape *shape, MemoryBuffer *mb);
+b8 rock_move(Rock *rock, Direction d, MemoryBuffer *mb);
+void rock_fall(Rock *rock, string8 jets, u32 *iptr, MemoryBuffer *mb);
+void debug_display(const Rock *rock, MemoryBuffer *mb);
 
 int main(int argc, char *argv[]) {
   if (argc < 2) {
@@ -58,108 +66,127 @@ int main(int argc, char *argv[]) {
   str_read_file(NULL, &file, argv[1]);
   file = str_trim(file);
 
-  hash_map *used = AUTO_HASHMAP(Position, b8);
+  MemoryBuffer mb = {0};
 
-  u64 top = 0;
-  u64 iptr = 0;
+  u32 iptr = 0;
   for (u64 iter = 0; iter < NITER; ++iter) {
-    Rock rock = rock_init(&shapes[iter % N_SHAPE], top);
-    rock_fall(&rock, file, &iptr, used);
-    top = MAX(rock.ul.y, top);
+    Rock rock = rock_init(&shapes[iter % N_SHAPE], &mb);
+    rock_fall(&rock, file, &iptr, &mb);
   }
 
-  printf("Part 1 = %lu\n", top);
+  printf("Part 1 = %lu\n", mb.y0 + mb.highest);
 
-  hm_deinit(used);
   free(file.str);
 
   return EXIT_SUCCESS;
 }
 
-Rock rock_init(const Shape *shape, u64 top) {
-  Position ul = (Position){.x = X0, .y = top + shape->height + SPAWN_HEIGHT};
-  return (Rock){.ul = ul, .shape = shape};
+Rock rock_init(const Shape *shape, MemoryBuffer *mb) {
+  for (u32 i = 0; i < 8; ++i) {
+    u32 n = mb->highest + i;
+    if (n < mb->n_row)
+      continue;
+    u32 r = (mb->idx0 + n) % MEM_BUF_SIZE;
+    memset(mb->buf[r], '.', WIDTH);
+    if (mb->n_row < MEM_BUF_SIZE) {
+      mb->n_row++;
+    } else {
+      mb->highest--;
+      mb->idx0++;
+      mb->y0++;
+    }
+  }
+  Position ll = (Position){.x = X0, .y = mb->highest + SPAWN_HEIGHT};
+  return (Rock){.ll = ll, .shape = shape};
 }
 
-b8 rock_move(Rock *rock, Direction d, hash_map *used) {
-  Position next_pos = rock->ul;
+b8 rock_move(Rock *rock, Direction d, MemoryBuffer *mb) {
+  Position new_pos = rock->ll;
+  const Shape *shp = rock->shape;
   switch (d) {
-  case Left:
-    if (next_pos.x == 0)
+  case Left: {
+    if (new_pos.x == 0)
       return false;
-    next_pos.x--;
-    break;
-  case Right:
-    if (next_pos.x + rock->shape->width == WIDTH)
+    new_pos.x--;
+  } break;
+  case Right: {
+    if (new_pos.x + shp->width == WIDTH)
       return false;
-    next_pos.x++;
-    break;
-  case Down:
-    if (next_pos.y == rock->shape->height)
+    new_pos.x++;
+  } break;
+  case Down: {
+    if (new_pos.y == 1) {
+      assert(mb->y0 == 0);
       return false;
-    next_pos.y--;
-    break;
+    }
+    new_pos.y--;
+  } break;
   }
-  for (u64 iy = 0; iy < rock->shape->height; ++iy) {
-    for (u64 ix = 0; ix < rock->shape->width; ++ix) {
-      if (!rock->shape->mask[iy * rock->shape->width + ix])
+  for (u32 iy = 0; iy < shp->height; ++iy) {
+    u32 y = new_pos.y + iy;
+    if (y >= mb->n_row)
+      continue; // We are outside of the buffer
+    for (u32 ix = 0; ix < shp->width; ++ix) {
+      if (!rock->shape->mask[iy * shp->width + ix])
         continue;
-      Position p = {next_pos.x + ix, next_pos.y - iy};
-      if (hm_contains_key(used, &p))
+      u32 x = new_pos.x + ix;
+      u32 r = (mb->idx0 + y) % MEM_BUF_SIZE;
+      if (mb->buf[r][x] == '#')
         return false;
     }
   }
-  rock->ul = next_pos;
+  rock->ll = new_pos;
   return true;
 }
 
-void rock_fall(Rock *rock, string8 jets, u64 *iptr, hash_map *used) {
-  // debug_display(rock, used, rock->ul.y);
+void rock_fall(Rock *rock, string8 jets, u32 *iptr, MemoryBuffer *mb) {
+  // debug_display(rock, mb);
   while (true) {
     Direction d = jets.str[*iptr] == '>' ? Right : Left;
-    rock_move(rock, d, used);
+    rock_move(rock, d, mb);
     *iptr = (*iptr + 1) % jets.size;
-    if (!rock_move(rock, Down, used))
+    if (!rock_move(rock, Down, mb))
       break;
-    // debug_display(rock, used, rock->ul.y);
+    // debug_display(rock, mb);
   }
-  // debug_display(rock, used, rock->ul.y);
-  b8 dummy = true;
-  for (u64 iy = 0; iy < rock->shape->height; ++iy) {
-    for (u64 ix = 0; ix < rock->shape->width; ++ix) {
-      if (!rock->shape->mask[iy * rock->shape->width + ix])
-        continue;
-      Position p = {rock->ul.x + ix, rock->ul.y - iy};
-      hm_put(used, &p, &dummy);
+  // debug_display(rock, mb);
+  const Shape *shp = rock->shape;
+  for (u32 iy = 0; iy < shp->height; ++iy) {
+    u32 y = rock->ll.y + iy;
+    u32 r = (mb->idx0 + y) % MEM_BUF_SIZE;
+    for (u32 ix = 0; ix < shp->width; ++ix) {
+      if (shp->mask[iy * shp->width + ix]) {
+        u32 x = rock->ll.x + ix;
+        mb->buf[r][x] = '#';
+        mb->highest = MAX(mb->highest, y);
+      }
     }
   }
 }
 
-void debug_display(const Rock *rock, hash_map *used, u64 top) {
-  u64 xo = rock->ul.x;
-  u64 yo = rock->ul.y;
-  for (u64 y = top; y > 0; --y) {
-    for (u64 x = 0; x < WIDTH; ++x) {
-      b8 is_rock = false;
-      if (x >= xo && x < xo + rock->shape->width && y <= yo &&
-          y > yo - rock->shape->height) {
-        u64 ix = x - xo;
-        u64 iy = yo - y;
-        is_rock = rock->shape->mask[iy * rock->shape->width + ix];
+void debug_display(const Rock *rock, MemoryBuffer *mb) {
+  for (u32 y = mb->n_row; y > 0; --y) {
+    u32 y2 = y - 1;
+    const Shape *shp = rock->shape;
+    for (u32 x = 0; x < WIDTH; ++x) {
+      if (y2 == 0 && mb->y0 == 0) {
+        printf("-");
+        continue;
       }
-      Position p = (Position){.x = x, .y = y};
-      if (hm_contains_key(used, &p)) {
-        if (is_rock) {
-          printf("Couille dans le potage!\n");
+      if (y2 >= rock->ll.y && y2 < rock->ll.y + shp->height &&
+          x >= rock->ll.x && x < rock->ll.x + shp->width) {
+        u32 ix = x - rock->ll.x;
+        u32 iy = y2 - rock->ll.y;
+        if (shp->mask[iy * shp->width + ix]) {
+          printf("@");
+          continue;
         }
-        printf("#");
-      } else if (is_rock) {
-        printf("@");
-      } else {
-        printf(".");
       }
+      u32 r = (mb->idx0 + y2) % MEM_BUF_SIZE;
+      printf("%c", mb->buf[r][x]);
     }
     printf("\n");
   }
-  printf("-------\n\n");
+  printf("\n");
+  printf("highest=%u\n", mb->highest);
 }
