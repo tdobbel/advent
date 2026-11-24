@@ -1,3 +1,4 @@
+#include <assert.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -5,13 +6,16 @@
 
 #define STRING_IMPLEMENTATION
 #include "string8.h"
+#define HASHMAP_IMPLEMENTATION
+#include "hash_map.h"
 
 #define WIDTH 7
 #define MEM_BUF_SIZE 64
 #define N_SHAPE 5
 #define X0 2
 #define SPAWN_HEIGHT 4
-#define NITER 2022
+#define N_ITER_PART2 1000000000000
+#define N_ROW_STATE 30
 
 #define MAX(a, b) ((a) > (b) ? (a) : (b))
 
@@ -36,8 +40,17 @@ typedef struct {
   u64 y0;
   u32 n_row;
   u32 highest; // relative to idx0
-  b8 buf[MEM_BUF_SIZE][WIDTH];
+  u8 buf[MEM_BUF_SIZE][WIDTH];
 } MemoryBuffer;
+
+typedef struct {
+  u32 shape, move;
+  u8 buf[N_ROW_STATE * WIDTH];
+} State;
+
+typedef struct {
+  u64 iter, height;
+} Timestamp;
 
 Shape shapes[N_SHAPE] = {
     (Shape){.width = 4, .height = 1, .mask = (b8[4]){1, 1, 1, 1}},
@@ -53,6 +66,8 @@ Shape shapes[N_SHAPE] = {
 
 Rock rock_init(const Shape *shape, MemoryBuffer *mb);
 b8 rock_move(Rock *rock, Direction d, MemoryBuffer *mb);
+void memory_buffer_reset(MemoryBuffer *mb);
+void get_last_rows(u8 buf[N_ROW_STATE * WIDTH], const MemoryBuffer *mb);
 void rock_fall(Rock *rock, string8 jets, u32 *iptr, MemoryBuffer *mb);
 void debug_display(const Rock *rock, MemoryBuffer *mb);
 
@@ -69,13 +84,51 @@ int main(int argc, char *argv[]) {
   MemoryBuffer mb = {0};
 
   u32 iptr = 0;
-  for (u64 iter = 0; iter < NITER; ++iter) {
+  u64 iter;
+  for (iter = 0; iter < 2022; ++iter) {
     Rock rock = rock_init(&shapes[iter % N_SHAPE], &mb);
     rock_fall(&rock, file, &iptr, &mb);
   }
 
   printf("Part 1 = %lu\n", mb.y0 + mb.highest);
 
+  hash_map *states = AUTO_HASHMAP(State, Timestamp);
+  u8 buf[N_ROW_STATE * WIDTH];
+  memory_buffer_reset(&mb);
+  iter = 0;
+  iptr = 0;
+  b8 cycle_found = false;
+  u64 extra_h = 0;
+  while (iter < N_ITER_PART2) {
+    u32 ishp = iter % N_SHAPE;
+    Rock rock = rock_init(&shapes[iter % N_SHAPE], &mb);
+    rock_fall(&rock, file, &iptr, &mb);
+    iter++;
+    if (!cycle_found && mb.highest >= N_ROW_STATE - 1) {
+      get_last_rows(buf, &mb);
+      State state = (State){.move = iptr, .shape = ishp};
+      memcpy(state.buf, buf, N_ROW_STATE * WIDTH);
+      Timestamp tt =
+          (Timestamp){.iter = iter, .height = (u64)mb.highest + mb.y0};
+      kv_entry entry = hm_get_or_put(states, &state);
+      if (entry.found_existing) {
+        Timestamp prev = *(Timestamp *)entry.value_ptr;
+        u64 period = tt.iter - prev.iter;
+        u64 dh = tt.height - prev.height;
+        u64 n_cycle = (N_ITER_PART2 - iter) / period;
+        iter += n_cycle * period;
+        extra_h = n_cycle * dh;
+        cycle_found = true;
+      } else {
+        *(Timestamp *)entry.value_ptr = tt;
+      }
+    }
+  }
+
+  u64 part2 = extra_h + mb.highest + mb.y0;
+  printf("Part 2 = %lu\n", part2);
+
+  hm_deinit(states);
   free(file.str);
 
   return EXIT_SUCCESS;
@@ -189,4 +242,21 @@ void debug_display(const Rock *rock, MemoryBuffer *mb) {
   }
   printf("\n");
   printf("highest=%u\n", mb->highest);
+}
+
+void memory_buffer_reset(MemoryBuffer *mb) {
+  mb->y0 = 0;
+  mb->highest = 0;
+  mb->idx0 = 0;
+  mb->n_row = 0;
+}
+
+void get_last_rows(u8 buf[N_ROW_STATE * WIDTH], const MemoryBuffer *mb) {
+  for (u32 i = 0; i < N_ROW_STATE; ++i) {
+    u32 y = mb->highest - i;
+    u32 r = (mb->idx0 + y) % MEM_BUF_SIZE;
+    for (u32 x = 0; x < WIDTH; ++x) {
+      buf[i * WIDTH + x] = mb->buf[r][x];
+    }
+  }
 }
